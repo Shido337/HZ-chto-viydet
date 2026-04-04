@@ -129,3 +129,7 @@ Files: strategies/continuation_break.py, core/bot_engine.py, tests/test_strategi
 ## [2026-04-04 23:39 UTC]
 Fix chart: replace fragile prev-sym refs with data-key tracking (symbol+tf+firstTs+count). Proper cleanup on unmount. Cancel stale fetches.
 Files: dashboard/src/components/CandleChart.tsx
+
+## [2026-04-04 23:53 UTC]
+Fix chart v3: render directly from REST fetch (no store round-trip), guard incremental updates via loadedKeyRef, autoSize:true
+Files: dashboard/src/components/CandleChart.tsx
