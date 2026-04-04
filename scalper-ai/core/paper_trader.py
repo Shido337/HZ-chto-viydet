@@ -18,9 +18,12 @@ TRAILING_ACTIVATION_RR = 0.5  # fallback: activate trailing at 0.5× risk
 TRAILING_RISK_FACTOR = 0.4    # fallback: trail distance = 40% of original risk
 MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
 BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
-MAX_HOLD_MINUTES = 5          # SCALPING: 5 min max, no lingering
+MAX_HOLD_MINUTES = 8          # SCALPING: 8 min max
+MAX_HOLD_IF_PROFIT = 12       # extend to 12 min if position is in profit
 LEVERAGE = 25
-CVD_EXIT_MIN_PNL_PCT = 0.001  # 0.1% profit enough for CVD exit
+CVD_EXIT_MIN_PNL_PCT = 0.003  # 0.3% min profit for CVD exit
+CVD_EXIT_MIN_ATR_MULT = 0.5   # OR 0.5× ATR profit for CVD exit
+CVD_EXIT_MIN_HOLD_SEC = 120   # hold at least 2 min before CVD exit
 # Binance futures fees: maker 0.02%, taker 0.04%
 MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
@@ -239,27 +242,36 @@ class PaperTrader:
     @staticmethod
     def _check_exits(pos: Position, snap: MarketSnapshot) -> str | None:
         price = snap.price
+        elapsed_sec = time.time() - pos.opened_at
+        elapsed_min = elapsed_sec / 60
+        is_long = pos.direction == Direction.LONG
+        in_profit = (price > pos.entry_price) if is_long else (price < pos.entry_price)
         # SL hit
-        if pos.direction == Direction.LONG and price <= pos.sl_price:
+        if is_long and price <= pos.sl_price:
             return "sl_hit"
-        if pos.direction == Direction.SHORT and price >= pos.sl_price:
+        if not is_long and price >= pos.sl_price:
             return "sl_hit"
         # TP hit
-        if pos.direction == Direction.LONG and price >= pos.tp_price:
+        if is_long and price >= pos.tp_price:
             return "tp_hit"
-        if pos.direction == Direction.SHORT and price <= pos.tp_price:
+        if not is_long and price <= pos.tp_price:
             return "tp_hit"
-        # CVD divergence exit (only if min profit threshold met)
-        pnl_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
-        if pos.direction == Direction.LONG and snap.cvd_delta_1m < 0:
-            if price > pos.entry_price and pnl_pct >= CVD_EXIT_MIN_PNL_PCT:
-                return "cvd_divergence"
-        if pos.direction == Direction.SHORT and snap.cvd_delta_1m > 0:
-            if price < pos.entry_price and pnl_pct >= CVD_EXIT_MIN_PNL_PCT:
-                return "cvd_divergence"
-        # Time stop
-        elapsed = (time.time() - pos.opened_at) / 60
-        if elapsed >= MAX_HOLD_MINUTES:
+        # CVD divergence exit — require significant profit + hold time
+        if elapsed_sec >= CVD_EXIT_MIN_HOLD_SEC and in_profit:
+            pnl_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
+            atr_val = snap.adaptive.atr_value
+            atr_profit = abs(price - pos.entry_price)
+            # Need BOTH: min % profit AND min ATR-relative profit
+            pct_ok = pnl_pct >= CVD_EXIT_MIN_PNL_PCT
+            atr_ok = atr_val <= 0 or atr_profit >= atr_val * CVD_EXIT_MIN_ATR_MULT
+            if pct_ok and atr_ok:
+                if is_long and snap.cvd_delta_1m < 0:
+                    return "cvd_divergence"
+                if not is_long and snap.cvd_delta_1m > 0:
+                    return "cvd_divergence"
+        # Time stop — extend if profitable
+        max_hold = MAX_HOLD_IF_PROFIT if in_profit else MAX_HOLD_MINUTES
+        if elapsed_min >= max_hold:
             return "time_stop"
         return None
 

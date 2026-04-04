@@ -48,7 +48,7 @@ class ContinuationBreak(BaseStrategy):
     # -- sub-checks ---------------------------------------------------------
 
     def _detect_break(self, snap: MarketSnapshot) -> Direction | None:
-        """3m structure break with body ≥ BODY_MIN_PCT."""
+        """3m structure break with impulsive body (≥ 0.5× ATR)."""
         candles = list(snap.klines_3m)
         if len(candles) < 12:
             return None
@@ -56,6 +56,10 @@ class ContinuationBreak(BaseStrategy):
         body = abs(last["c"] - last["o"])
         body_pct = body / last["o"] if last["o"] else 0.0
         if body_pct < BODY_MIN_PCT:
+            return None
+        # Require impulsive candle: body ≥ 0.5× ATR (confirms real break)
+        atr_val = snap.adaptive.atr_value
+        if atr_val > 0 and body < atr_val * 0.5:
             return None
         swing_h = detect_swing_high(candles[:-1], SWING_LOOKBACK)
         swing_l = detect_swing_low(candles[:-1], SWING_LOOKBACK)

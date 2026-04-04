@@ -487,23 +487,23 @@ class BotEngine:
         # Base: 0.5–2.0 ATR.  Tighter in trending (clear structure),
         # wider in ranging/high-vol (noise).
         if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
-            max_sl = 1.5
+            max_sl = 2.0
             min_sl = 0.4
         elif regime == MarketRegime.HIGH_VOL:
             max_sl = 3.0
             min_sl = 0.8
         elif regime == MarketRegime.LOW_VOL:
-            max_sl = 2.0
+            max_sl = 2.5
             min_sl = 0.3
         else:  # RANGING
-            max_sl = 2.0
+            max_sl = 2.5
             min_sl = 0.5
 
         # --- TP ratio adjusted by regime ---
         if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
-            tp_rr = 1.8   # trends run further
+            tp_rr = 2.0   # trends run further — let trailing catch more
         elif regime == MarketRegime.HIGH_VOL:
-            tp_rr = 1.2   # take profits sooner in high vol
+            tp_rr = 1.5   # take profits, but not too soon
         elif regime == MarketRegime.LOW_VOL:
             tp_rr = 2.0   # low vol = need wider target
         else:  # RANGING
@@ -511,17 +511,17 @@ class BotEngine:
 
         # --- Trailing distances (ATR-relative) ---
         if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
-            trail_activation = 0.4   # activate early in trends
-            trail_distance = 0.25    # tight trail to lock profits
-            be_trigger = 0.35
+            trail_activation = 0.3   # activate early in trends
+            trail_distance = 0.2     # tight trail to lock profits fast
+            be_trigger = 0.25
         elif regime == MarketRegime.HIGH_VOL:
-            trail_activation = 0.8   # wait longer in high vol
-            trail_distance = 0.5     # wide trail for noise
-            be_trigger = 0.6
+            trail_activation = 0.6   # moderate in high vol
+            trail_distance = 0.4     # wider trail for noise
+            be_trigger = 0.5
         else:  # RANGING / LOW_VOL
-            trail_activation = 0.5
-            trail_distance = 0.3
-            be_trigger = 0.4
+            trail_activation = 0.4
+            trail_distance = 0.25
+            be_trigger = 0.35
 
         # --- OB & volume thresholds adjusted by ATR percentile ---
         # Low ATR percentile = quiet market → relax filters to find trades
