@@ -14,7 +14,7 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # Fixed structural constants (NOT volatility-dependent)
 # ---------------------------------------------------------------------------
 BODY_MIN_PCT = 0.0003          # 0.03% minimum body (filter noise)
-MOMENTUM_BARS = 2              # last 2 1m closes in direction
+MOMENTUM_BARS = 3              # last 3 1m closes in direction (was 2)
 ENTRY_BUFFER_PCT = 0.0001      # 0.01% buffer
 SWING_LOOKBACK = 8             # 8 candles (~24 min at 3m)
 MIN_RISK_PCT = 0.001           # 0.1% absolute minimum risk
@@ -59,9 +59,9 @@ class ContinuationBreak(BaseStrategy):
         body_pct = body / last["o"] if last["o"] else 0.0
         if body_pct < BODY_MIN_PCT:
             return None
-        # Require impulsive candle: body ≥ 0.5× ATR (confirms real break)
+        # Require impulsive candle: body ≥ 0.7× ATR (confirms real break)
         atr_val = snap.adaptive.atr_value
-        if atr_val > 0 and body < atr_val * 0.5:
+        if atr_val > 0 and body < atr_val * 0.7:
             return None
         swing_h = detect_swing_high(candles[:-1], SWING_LOOKBACK)
         swing_l = detect_swing_low(candles[:-1], SWING_LOOKBACK)

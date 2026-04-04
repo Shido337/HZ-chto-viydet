@@ -1,5 +1,13 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-04 23:25 UTC]
+Performance tuning based on 69-trade analysis (CB 25%WR draining profits):
+1. CB body requirement: 0.5× → 0.7× ATR — filters weak breaks (main loss source)
+2. CB momentum bars: 2 → 3 — more confirmation before entering breakouts
+3. Stale exit: close losing positions after 4min if down >0.2% — stops dead weight positions
+4. Max hold if profit: 12min → 10min — less time for reversals to eat profits
+Files: strategies/continuation_break.py, core/paper_trader.py
+
 ## [2026-04-04 23:12 UTC]
 Fix late MR entry — two changes:
 1. MR entry at 50% retracement between sweep_extreme and swing_level (was at swing_level = entering after bounce)

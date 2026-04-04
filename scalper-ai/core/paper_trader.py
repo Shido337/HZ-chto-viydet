@@ -19,7 +19,9 @@ TRAILING_RISK_FACTOR = 0.4    # fallback: trail distance = 40% of original risk
 MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
 BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
 MAX_HOLD_MINUTES = 8          # SCALPING: 8 min max
-MAX_HOLD_IF_PROFIT = 12       # extend to 12 min if position is in profit
+MAX_HOLD_IF_PROFIT = 10       # extend to 10 min if position is in profit (was 12)
+STALE_EXIT_MINUTES = 4        # close if still losing after 4 min without improvement
+STALE_EXIT_DRAWDOWN = 0.002   # 0.2% unrealized loss threshold for stale exit
 LEVERAGE = 25
 CVD_EXIT_MIN_PNL_PCT = 0.003  # 0.3% min profit for CVD exit
 CVD_EXIT_MIN_ATR_MULT = 0.5   # OR 0.5× ATR profit for CVD exit
@@ -261,6 +263,11 @@ class PaperTrader:
             return ("tp_hit", pos.tp_price)
         if not is_long and price <= pos.tp_price:
             return ("tp_hit", pos.tp_price)
+        # Stale exit: losing >0.2% after 4 min with no improvement
+        if not in_profit and elapsed_min >= STALE_EXIT_MINUTES:
+            loss_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
+            if loss_pct >= STALE_EXIT_DRAWDOWN:
+                return ("stale_exit", price)
         # CVD divergence exit — market price
         if elapsed_sec >= CVD_EXIT_MIN_HOLD_SEC and in_profit:
             pnl_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
