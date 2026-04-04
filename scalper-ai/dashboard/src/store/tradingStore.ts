@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  Candle,
   MarketSnapshot,
   MLStats,
   PendingOrder,
@@ -24,6 +25,7 @@ interface TradingState {
   mlStats: MLStats;
   wsConnected: boolean;
   settingsOpen: boolean;
+  tradeHistoryOpen: boolean;
   sizeMode: 'FIXED' | 'ADAPTIVE' | 'PERCENT';
   fixedAmount: number;
   adaptiveBase: number;
@@ -38,7 +40,9 @@ interface TradingState {
   setMode: (m: 'paper' | 'live') => void;
   setBalance: (b: number, pnl: number) => void;
   setSelectedSymbol: (s: string) => void;
+  setSymbols: (syms: string[]) => void;
   setSnapshot: (s: MarketSnapshot) => void;
+  updateKline: (symbol: string, tf: string, candle: Candle) => void;
   addSignal: (s: Signal) => void;
   removeSignal: (id: string) => void;
   setPosition: (p: Position) => void;
@@ -50,6 +54,7 @@ interface TradingState {
   setMLStats: (s: MLStats) => void;
   setWsConnected: (c: boolean) => void;
   setSettingsOpen: (o: boolean) => void;
+  setTradeHistoryOpen: (o: boolean) => void;
   setSizeMode: (m: 'FIXED' | 'ADAPTIVE' | 'PERCENT') => void;
   setFixedAmount: (a: number) => void;
   setAdaptiveBase: (a: number) => void;
@@ -71,6 +76,7 @@ export const useTradingStore = create<TradingState>((set, get) => ({
   mlStats: { samples: 0, accuracy: 0, recent_accuracy: 0, drift: 'Stable' },
   wsConnected: false,
   settingsOpen: false,
+  tradeHistoryOpen: false,
   sizeMode: 'FIXED',
   fixedAmount: 100,
   adaptiveBase: 100,
@@ -94,8 +100,42 @@ export const useTradingStore = create<TradingState>((set, get) => ({
   setMode: (m) => set({ mode: m }),
   setBalance: (b, pnl) => set({ balance: b, dailyPnl: pnl }),
   setSelectedSymbol: (s) => set({ selectedSymbol: s }),
+  setSymbols: (syms) => set({ symbols: syms }),
   setSnapshot: (s) =>
-    set((st) => ({ snapshots: { ...st.snapshots, [s.symbol]: s } })),
+    set((st) => {
+      const existing = st.snapshots[s.symbol];
+      return {
+        snapshots: {
+          ...st.snapshots,
+          [s.symbol]: {
+            ...s,
+            klines_1m: s.klines_1m?.length ? s.klines_1m : existing?.klines_1m ?? [],
+            klines_3m: s.klines_3m?.length ? s.klines_3m : existing?.klines_3m ?? [],
+            klines_5m: s.klines_5m?.length ? s.klines_5m : existing?.klines_5m ?? [],
+          },
+        },
+      };
+    }),
+  updateKline: (symbol, tf, candle) =>
+    set((st) => {
+      const snap = st.snapshots[symbol];
+      if (!snap) return st;
+      const key = `klines_${tf}` as 'klines_1m' | 'klines_3m' | 'klines_5m';
+      const klines = [...(snap[key] || [])];
+      const last = klines[klines.length - 1];
+      if (last && last.t === candle.t) {
+        klines[klines.length - 1] = candle;
+      } else {
+        klines.push(candle);
+        if (klines.length > 500) klines.shift();
+      }
+      return {
+        snapshots: {
+          ...st.snapshots,
+          [symbol]: { ...snap, [key]: klines },
+        },
+      };
+    }),
   addSignal: (s) => set((st) => ({ signals: [...st.signals, s] })),
   removeSignal: (id) =>
     set((st) => ({ signals: st.signals.filter((x) => x.id !== id) })),
@@ -127,6 +167,7 @@ export const useTradingStore = create<TradingState>((set, get) => ({
   setMLStats: (s) => set({ mlStats: s }),
   setWsConnected: (c) => set({ wsConnected: c }),
   setSettingsOpen: (o) => set({ settingsOpen: o }),
+  setTradeHistoryOpen: (o) => set({ tradeHistoryOpen: o }),
   setSizeMode: (m) => set({ sizeMode: m }),
   setFixedAmount: (a) => set({ fixedAmount: a }),
   setAdaptiveBase: (a) => set({ adaptiveBase: a }),

@@ -75,3 +75,21 @@ class Position:
     trailing_activated: bool = False
     breakeven_moved: bool = False
     current_pnl: float = 0.0
+
+
+@dataclass
+class PendingOrder:
+    """Pending limit order waiting to be filled."""
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    signal: Signal = field(default_factory=Signal)
+    symbol: str = ""
+    direction: Direction = Direction.LONG
+    setup_type: SetupType = SetupType.CONTINUATION_BREAK
+    score: float = 0.0
+    entry_price: float = 0.0  # limit price (bid for LONG, ask for SHORT)
+    sl_price: float = 0.0
+    tp_price: float = 0.0
+    size_usdt: float = 0.0
+    quantity: float = 0.0
+    created_at: float = field(default_factory=time.time)
+    expiry: float = 0.0

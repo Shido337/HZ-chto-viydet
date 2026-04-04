@@ -17,6 +17,7 @@ export const TopBar: React.FC = () => {
   const setMode = useTradingStore((s) => s.setMode);
   const setFixedAmount = useTradingStore((s) => s.setFixedAmount);
   const setSettingsOpen = useTradingStore((s) => s.setSettingsOpen);
+  const setTradeHistoryOpen = useTradingStore((s) => s.setTradeHistoryOpen);
 
   const switchMode = async (m: 'paper' | 'live') => {
     const res = await fetch(`/api/mode/${m}`, { method: 'POST' });
@@ -95,6 +96,9 @@ export const TopBar: React.FC = () => {
         <span className="stat-value">{totalTrades()}</span>
       </div>
 
+      <button className="btn-history" onClick={() => setTradeHistoryOpen(true)}>
+        HISTORY
+      </button>
       <button className="btn-settings" onClick={() => setSettingsOpen(true)}>
         ⚙
       </button>

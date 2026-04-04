@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, PriceLineOptions, LineStyle } from 'lightweight-charts';
 import { useTradingStore } from '../store/tradingStore';
 
 type TF = '1m' | '3m' | '5m';
@@ -8,10 +8,13 @@ export const CandleChart: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const priceLinesRef = useRef<any[]>([]);
   const [tf, setTf] = useState<TF>('1m');
 
   const symbol = useTradingStore((s) => s.selectedSymbol);
   const snap = useTradingStore((s) => s.snapshots[symbol]);
+  const positions = useTradingStore((s) => s.positions);
+  const pendingOrders = useTradingStore((s) => s.pendingOrders);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -65,6 +68,83 @@ export const CandleChart: React.FC = () => {
     }));
     seriesRef.current.setData(data);
   }, [snap, tf]);
+
+  // -- Price level lines (Entry / SL / TP / Trailing) ----------------------
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    // Remove previously created price lines
+    for (const line of priceLinesRef.current) {
+      series.removePriceLine(line);
+    }
+    priceLinesRef.current = [];
+
+    // Active position for selected symbol
+    const pos = positions.find((p) => p.symbol === symbol);
+    if (pos) {
+      const base: Partial<PriceLineOptions> = {
+        axisLabelVisible: true,
+        lineWidth: 1,
+      };
+      const addLine = (opts: PriceLineOptions) => {
+        priceLinesRef.current.push(series.createPriceLine(opts));
+      };
+      addLine({
+        ...base,
+        price: pos.entry_price,
+        color: '#ffaa00',
+        lineStyle: LineStyle.Solid,
+        title: `ENTRY ${pos.direction}`,
+      } as PriceLineOptions);
+      addLine({
+        ...base,
+        price: pos.sl_price,
+        color: '#ff4466',
+        lineStyle: pos.breakeven_moved ? LineStyle.Solid : LineStyle.Dashed,
+        title: pos.breakeven_moved ? 'BE' : 'SL',
+      } as PriceLineOptions);
+      addLine({
+        ...base,
+        price: pos.tp_price,
+        color: '#00d4aa',
+        lineStyle: LineStyle.Dashed,
+        title: 'TP',
+      } as PriceLineOptions);
+      // Trailing stop line (only when trailing is active)
+      if (pos.trailing_activated && pos.best_price > 0) {
+        const TRAILING_PCT = 0.0015;
+        const trailSl =
+          pos.direction === 'LONG'
+            ? pos.best_price * (1 - TRAILING_PCT)
+            : pos.best_price * (1 + TRAILING_PCT);
+        if (Math.abs(trailSl - pos.sl_price) > pos.entry_price * 0.00001) {
+          addLine({
+            ...base,
+            price: trailSl,
+            color: '#ff88ff',
+            lineStyle: LineStyle.Dotted,
+            title: 'TRAIL',
+          } as PriceLineOptions);
+        }
+      }
+    }
+
+    // Pending limit order for selected symbol
+    const pending = pendingOrders.find((o) => o.symbol === symbol);
+    if (pending) {
+      priceLinesRef.current.push(
+        series.createPriceLine({
+          price: pending.price,
+          color: '#ffaa00',
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          lineWidth: 1,
+          title: `LIMIT ${pending.direction}`,
+        } as PriceLineOptions),
+      );
+    }
+  }, [positions, pendingOrders, symbol]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>

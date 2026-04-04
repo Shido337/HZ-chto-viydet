@@ -11,7 +11,7 @@ from loguru import logger
 from core.paper_trader import PaperTrader
 from core.regime_classifier import RegimeClassifier
 from core.risk_manager import RiskManager
-from core.signal_generator import Signal
+from core.signal_generator import PendingOrder, Signal
 from core.coin_screener import CoinScreener, SCREENER_INTERVAL
 from data.cache import MarketCache, MarketRegime
 from exchange.binance_client import BinanceClient
@@ -79,6 +79,10 @@ class BotEngine:
         self._on_trade_close: Any = None  # callback for server WS
         self._on_signal: Any = None
         self._on_regime: Any = None
+        self._on_position_opened: Any = None
+        self._on_kline_update: Any = None
+        self._on_pending_placed: Any = None
+        self._on_pending_cancelled: Any = None
         self.signals: list[Signal] = []
         self._signal_cooldown: dict[str, float] = {}  # symbol → last signal time
         self._last_screen_time = 0.0
@@ -180,6 +184,18 @@ class BotEngine:
                 )
             self._diagnose_strategies()
 
+        # Check pending limit orders (PaperTrader only)
+        if hasattr(self.trader, "check_pending"):
+            filled, expired = self.trader.check_pending()
+            for pos in filled:
+                if self._on_pending_cancelled:
+                    await self._on_pending_cancelled(pos)
+                if self._on_position_opened:
+                    await self._on_position_opened(pos)
+            for order in expired:
+                if self._on_pending_cancelled:
+                    await self._on_pending_cancelled(order)
+
         # Update existing positions (sync for PaperTrader, async for LiveTrader)
         result = self.trader.update_positions()
         if asyncio.iscoroutine(result):
@@ -204,6 +220,9 @@ class BotEngine:
             if snap.stale or not snap.price:
                 continue
             if symbol in self.trader.positions:
+                continue
+            # Skip symbols with pending limit orders
+            if hasattr(self.trader, "pending") and symbol in self.trader.pending:
                 continue
             # Signal cooldown: 60s per symbol to prevent spam
             if now - self._signal_cooldown.get(symbol, 0) < 60:
@@ -376,7 +395,16 @@ class BotEngine:
             return
         result = self.trader.open_position(signal, size)
         if asyncio.iscoroutine(result):
-            await result
+            result = await result
+        if result is None:
+            return
+        # PaperTrader returns PendingOrder, LiveTrader returns Position
+        if isinstance(result, PendingOrder):
+            if self._on_pending_placed:
+                await self._on_pending_placed(result)
+        else:
+            if self._on_position_opened:
+                await self._on_position_opened(result)
 
     # -- historical data preload ---------------------------------------------
 
@@ -553,6 +581,9 @@ class BotEngine:
             # Rotate CVD delta on 1m close
             if tf == "1m" and candle["closed"]:
                 self.cache.rotate_1m_delta(symbol)
+            # Forward closed candles to dashboard
+            if self._on_kline_update and candle["closed"]:
+                await self._on_kline_update(symbol, tf, candle)
         return handler
 
     def _make_book_handler(self, symbol: str) -> Any:

@@ -31,8 +31,30 @@ export function useWebSocket(): void {
 
     function handleEvent(event: WsEvent) {
       switch (event.type) {
+        case 'init_state': {
+          const { symbols, balance, daily_pnl, mode, regimes } = event.data;
+          store.setSymbols(symbols);
+          store.setBalance(balance, daily_pnl);
+          store.setMode(mode);
+          for (const [sym, reg] of Object.entries(regimes)) {
+            store.setRegime(sym, reg);
+          }
+          // Auto-select first symbol if current not in list
+          const current = useTradingStore.getState().selectedSymbol;
+          if (!symbols.includes(current) && symbols.length > 0) {
+            store.setSelectedSymbol(symbols[0]);
+          }
+          break;
+        }
         case 'market_snapshot':
           store.setSnapshot(event.data);
+          break;
+        case 'kline_update':
+          store.updateKline(
+            event.data.symbol,
+            event.data.tf,
+            event.data.candle,
+          );
           break;
         case 'signal_new':
           store.addSignal(event.data);

@@ -16,12 +16,14 @@ import { ActiveSignals } from './components/ActiveSignals';
 import { EquityCurve } from './components/EquityCurve';
 import { Monitor } from './components/Monitor';
 import { SettingsModal } from './components/SettingsModal';
+import { TradeHistory } from './components/TradeHistory';
 
 export const App: React.FC = () => {
   useWebSocket();
   const settingsOpen = useTradingStore((s) => s.settingsOpen);
-
+  const tradeHistoryOpen = useTradingStore((s) => s.tradeHistoryOpen);
   const setSettingsOpen = useTradingStore((s) => s.setSettingsOpen);
+  const setTradeHistoryOpen = useTradingStore((s) => s.setTradeHistoryOpen);
 
   return (
     <>
@@ -36,10 +38,14 @@ export const App: React.FC = () => {
           <PendingLimits />
         </div>
         <div className="center-panel">
-          <CandleChart />
-          <CVDPanel />
-          <OpenPositions />
-          <PendingLimitsTable />
+          <div className="chart-area">
+            <CandleChart />
+            <CVDPanel />
+          </div>
+          <div className="tables-area">
+            <OpenPositions />
+            <PendingLimitsTable />
+          </div>
         </div>
         <div className="right-panel">
           <ActiveSignals />
@@ -48,6 +54,7 @@ export const App: React.FC = () => {
         </div>
       </div>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <TradeHistory open={tradeHistoryOpen} onClose={() => setTradeHistoryOpen(false)} />
     </>
   );
 };

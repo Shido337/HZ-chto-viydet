@@ -4,6 +4,7 @@ import { useTradingStore } from '../store/tradingStore';
 export const OpenPositions: React.FC = () => {
   const positions = useTradingStore((s) => s.positions);
   const snapshots = useTradingStore((s) => s.snapshots);
+  const setSelectedSymbol = useTradingStore((s) => s.setSelectedSymbol);
 
   const handleClose = async (_symbol: string) => {
     await fetch('/api/stop', { method: 'POST' });
@@ -41,7 +42,7 @@ export const OpenPositions: React.FC = () => {
             const snap = snapshots[p.symbol];
             const currentPrice = snap?.price ?? 0;
             return (
-              <tr key={p.id}>
+              <tr key={p.id} onClick={() => setSelectedSymbol(p.symbol)} style={{ cursor: 'pointer' }}>
                 <td>{p.symbol.replace('USDT', '')}</td>
                 <td>
                   <span

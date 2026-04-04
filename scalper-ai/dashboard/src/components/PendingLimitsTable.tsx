@@ -4,6 +4,7 @@ import { useTradingStore } from '../store/tradingStore';
 export const PendingLimitsTable: React.FC = () => {
   const orders = useTradingStore((s) => s.pendingOrders);
   const snapshots = useTradingStore((s) => s.snapshots);
+  const setSelectedSymbol = useTradingStore((s) => s.setSelectedSymbol);
 
   const handleCancel = async (_symbol: string) => {
     await fetch(`/api/stop`, { method: 'POST' });
@@ -47,7 +48,7 @@ export const PendingLimitsTable: React.FC = () => {
               ? new Date(o.expiry).toLocaleTimeString()
               : '—';
             return (
-              <tr key={o.symbol}>
+              <tr key={o.symbol} onClick={() => setSelectedSymbol(o.symbol)} style={{ cursor: 'pointer' }}>
                 <td>{o.symbol.replace('USDT', '')}</td>
                 <td>{o.size_usdt.toFixed(2)}</td>
                 <td style={{ fontSize: 10 }}>{o.setup_type.replace(/_/g, ' ')}</td>

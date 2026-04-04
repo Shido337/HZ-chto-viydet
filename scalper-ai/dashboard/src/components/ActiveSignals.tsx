@@ -4,15 +4,20 @@ import { useTradingStore } from '../store/tradingStore';
 export const ActiveSignals: React.FC = () => {
   const signals = useTradingStore((s) => s.signals);
 
+  const recent = signals.slice(-5);
+
   return (
-    <div className="panel-section">
-      <div className="panel-header">Active Signals</div>
+    <div className="panel-section" style={{ maxHeight: 220, overflow: 'auto' }}>
+      <div className="panel-header">
+        Active Signals{' '}
+        <span style={{ color: 'var(--cyan)', fontWeight: 400 }}>({signals.length})</span>
+      </div>
       {signals.length === 0 && (
         <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
           No active signals
         </div>
       )}
-      {signals.map((sig) => (
+      {recent.map((sig) => (
         <div key={sig.id} className="signal-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
             <span

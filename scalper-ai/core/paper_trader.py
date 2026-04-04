@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from core.signal_generator import Direction, Position, Signal
+from core.signal_generator import Direction, PendingOrder, Position, Signal
 from data.cache import MarketCache
 
 if TYPE_CHECKING:
@@ -24,6 +24,7 @@ CVD_EXIT_MIN_PNL_PCT = 0.001  # 0.1% profit enough for CVD exit
 # Binance futures fees: maker 0.02%, taker 0.04%
 MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
+PENDING_TIMEOUT = 30  # seconds — cancel unfilled limit after this
 
 
 class PaperTrader:
@@ -32,14 +33,16 @@ class PaperTrader:
     def __init__(self, cache: MarketCache) -> None:
         self.cache = cache
         self.positions: dict[str, Position] = {}
+        self.pending: dict[str, PendingOrder] = {}
 
     @property
     def open_count(self) -> int:
-        return len(self.positions)
+        return len(self.positions) + len(self.pending)
 
     # -- open ---------------------------------------------------------------
 
-    def open_position(self, signal: Signal, size_usdt: float) -> Position | None:
+    def open_position(self, signal: Signal, size_usdt: float) -> PendingOrder | None:
+        """Place a limit order at best bid/ask. Returns PendingOrder."""
         # Sanity: TP must be on the correct side of entry
         if signal.direction == Direction.LONG and signal.tp_price <= signal.entry_price:
             logger.warning(f"[PAPER] Rejected {signal.symbol}: TP {signal.tp_price} <= entry {signal.entry_price}")
@@ -47,30 +50,98 @@ class PaperTrader:
         if signal.direction == Direction.SHORT and signal.tp_price >= signal.entry_price:
             logger.warning(f"[PAPER] Rejected {signal.symbol}: TP {signal.tp_price} >= entry {signal.entry_price}")
             return None
-        # size_usdt = position size (notional), NOT margin
+
+        # Use order book for better entry: bid for LONG, ask for SHORT
+        snap = self.cache.get_snapshot(signal.symbol)
+        if signal.direction == Direction.LONG:
+            entry = snap.bid if snap.bid > 0 else signal.entry_price
+        else:
+            entry = snap.ask if snap.ask > 0 else signal.entry_price
+
+        # Shift SL/TP by the same delta so risk/reward stays proportional
+        shift = entry - signal.entry_price
+        sl = signal.sl_price + shift
+        tp = signal.tp_price + shift
+
         notional = size_usdt
         margin = notional / LEVERAGE
-        sl_pct = abs(signal.entry_price - signal.sl_price) / signal.entry_price if signal.entry_price else 0
-        pos = Position(
+
+        order = PendingOrder(
             signal=signal,
             symbol=signal.symbol,
             direction=signal.direction,
             setup_type=signal.setup_type,
             score=signal.score,
-            entry_price=signal.entry_price,
-            sl_price=signal.sl_price,
-            tp_price=signal.tp_price,
+            entry_price=entry,
+            sl_price=sl,
+            tp_price=tp,
             size_usdt=notional,
-            quantity=notional / signal.entry_price if signal.entry_price else 0,
-            best_price=signal.entry_price,
+            quantity=notional / entry if entry else 0,
+            expiry=time.time() + PENDING_TIMEOUT,
         )
-        self.positions[signal.symbol] = pos
+        self.pending[signal.symbol] = order
+        sl_pct = abs(entry - sl) / entry if entry else 0
         logger.info(
-            f"[PAPER] Opened {signal.direction.value} {signal.symbol} "
-            f"@ {signal.entry_price:.6f} notional=${notional:.2f} "
-            f"margin=${margin:.2f} sl_dist={sl_pct*100:.3f}%",
+            f"[PAPER] Limit placed {signal.direction.value} {signal.symbol} "
+            f"@ {entry:.6f} (signal: {signal.entry_price:.6f}, shift={shift:+.6f}) "
+            f"SL={sl:.6f} TP={tp:.6f} "
+            f"notional=${notional:.2f} margin=${margin:.2f} "
+            f"sl_dist={sl_pct*100:.3f}% expires={PENDING_TIMEOUT}s",
         )
-        return pos
+        return order
+
+    # -- pending fills ------------------------------------------------------
+
+    def check_pending(self) -> tuple[list[Position], list[PendingOrder]]:
+        """Check pending limit orders for fills and expiry."""
+        filled: list[Position] = []
+        expired: list[PendingOrder] = []
+        now = time.time()
+
+        for symbol in list(self.pending):
+            order = self.pending[symbol]
+            snap = self.cache.get_snapshot(symbol)
+            if snap.stale or not snap.price:
+                continue
+
+            # Maker limit fill: LONG fills when ask drops to our bid,
+            # SHORT fills when bid rises to our ask
+            is_filled = False
+            if order.direction == Direction.LONG:
+                is_filled = 0 < snap.ask <= order.entry_price
+            else:
+                is_filled = snap.bid >= order.entry_price > 0
+
+            if is_filled:
+                pos = Position(
+                    signal=order.signal,
+                    symbol=order.symbol,
+                    direction=order.direction,
+                    setup_type=order.setup_type,
+                    score=order.score,
+                    entry_price=order.entry_price,
+                    sl_price=order.sl_price,
+                    tp_price=order.tp_price,
+                    size_usdt=order.size_usdt,
+                    quantity=order.quantity,
+                    best_price=order.entry_price,
+                )
+                self.positions[symbol] = pos
+                del self.pending[symbol]
+                filled.append(pos)
+                logger.info(
+                    f"[PAPER] Limit FILLED {order.direction.value} {symbol} "
+                    f"@ {order.entry_price:.6f}",
+                )
+            elif now >= order.expiry:
+                del self.pending[symbol]
+                expired.append(order)
+                logger.info(
+                    f"[PAPER] Limit EXPIRED {symbol} "
+                    f"@ {order.entry_price:.6f} (not filled in {PENDING_TIMEOUT}s)",
+                )
+
+        return filled, expired
 
     # -- close --------------------------------------------------------------
 
@@ -123,13 +194,15 @@ class PaperTrader:
             return
         risk = abs(pos.entry_price - pos.sl_price)
         trigger = risk * BREAKEVEN_TRIGGER_RR
+        # Offset BE by round-trip fees so "breakeven" doesn't lose money
+        fee_buffer = pos.entry_price * (MAKER_FEE + TAKER_FEE)
         if pos.direction == Direction.LONG:
             if price >= pos.entry_price + trigger:
-                pos.sl_price = pos.entry_price
+                pos.sl_price = pos.entry_price + fee_buffer
                 pos.breakeven_moved = True
         else:
             if price <= pos.entry_price - trigger:
-                pos.sl_price = pos.entry_price
+                pos.sl_price = pos.entry_price - fee_buffer
                 pos.breakeven_moved = True
 
     @staticmethod

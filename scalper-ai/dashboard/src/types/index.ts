@@ -66,6 +66,7 @@ export interface Position {
   liquidation_price: number;
   trailing_activated: boolean;
   breakeven_moved: boolean;
+  best_price: number;
 }
 
 export interface Trade {
@@ -73,6 +74,24 @@ export interface Trade {
   direction: 'LONG' | 'SHORT';
   pnl: number;
   reason: string;
+}
+
+export interface TradeHistoryRecord {
+  id: number;
+  symbol: string;
+  direction: string;
+  setup_type: string;
+  score: number;
+  entry_price: number;
+  exit_price: number;
+  sl_price: number;
+  tp_price: number;
+  size_usdt: number;
+  pnl: number;
+  result: string;
+  exit_reason: string;
+  opened_at: string | null;
+  closed_at: string | null;
 }
 
 export interface PendingOrder {
@@ -92,8 +111,18 @@ export interface MLStats {
   drift: string;
 }
 
+export interface InitState {
+  symbols: string[];
+  balance: number;
+  daily_pnl: number;
+  mode: 'paper' | 'live';
+  regimes: Record<string, string>;
+}
+
 export type WsEvent =
+  | { type: 'init_state'; data: InitState }
   | { type: 'market_snapshot'; data: MarketSnapshot }
+  | { type: 'kline_update'; data: { symbol: string; tf: string; candle: Candle } }
   | { type: 'signal_new'; data: Signal }
   | { type: 'signal_expired'; data: { id: string } }
   | { type: 'position_opened'; data: Position }
