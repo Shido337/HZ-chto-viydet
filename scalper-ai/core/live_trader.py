@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-TRAILING_ACTIVATION_RR = 0.5  # fallback if no ATR
+BREAKEVEN_TRIGGER_RR = 0.6    # fallback BE trigger if no ATR
+TRAILING_ACTIVATION_RR = 0.5  # fallback real trail activation
 TRAILING_RISK_FACTOR = 0.4    # fallback trail distance
 MIN_TRAIL_PCT = 0.0003        # 0.03% absolute minimum trail
 MAX_HOLD_MINUTES = 8
@@ -33,12 +34,17 @@ MAX_CALLBACK_RATE = 5.0  # 5.0%
 
 
 class LiveTrader:
-    """Real exchange execution with full position lifecycle.
+    """Real exchange execution with 2-stage trailing lifecycle.
 
-    Places SL + TP + TRAILING_STOP_MARKET on Binance at entry.
-    Exchange handles trailing natively — no software trailing needed.
-    Software only manages CVD divergence exit and time stop.
-    Listens for ORDER_TRADE_UPDATE events from user data stream.
+    Stage 1 (at entry): SL + TP + BE-trailing (TRAILING_STOP_MARKET
+        with small callbackRate — activates at BE trigger and locks
+        in breakeven profit when it fires).
+    Stage 2 (price hits real trail level — one-time upgrade):
+        Cancel BE-trailing → place real TRAILING_STOP_MARKET with
+        proper callbackRate from ATR (activates immediately since
+        price already past activation).
+    All 3 protective orders live on Binance — software only does
+    CVD divergence exit, time stop, and the one-time trail upgrade.
     """
 
     def __init__(
@@ -53,6 +59,8 @@ class LiveTrader:
         self.positions: dict[str, Position] = {}
         # Positions closed by exchange (SL/TP/trailing hit on Binance side)
         self._exchange_closed: dict[str, str] = {}  # symbol -> reason
+        # Track which positions have been upgraded to real trailing
+        self._trail_upgraded: set[str] = set()
 
     @property
     def open_count(self) -> int:
@@ -141,9 +149,9 @@ class LiveTrader:
             sl_price, tp_price, avg_price,
         )
 
-        # Get adaptive params for trailing calculation
+        # Stage 1: SL + TP + BE-trailing (all on Binance)
         snap = self.cache.get_snapshot(signal.symbol)
-        ok = await self._place_protective_orders(pos, snap.adaptive)
+        ok = await self._place_stage1_orders(pos, snap.adaptive)
         if not ok:
             await self._emergency_close(pos)
             return None
@@ -178,6 +186,7 @@ class LiveTrader:
 
         snap = self.cache.get_snapshot(symbol)
         pos.current_pnl = self._calc_pnl(pos, snap.price, reason)
+        self._trail_upgraded.discard(symbol)
         logger.info(
             f"[LIVE] Closed {symbol} reason={reason} "
             f"pnl={pos.current_pnl:+.4f}",
@@ -204,7 +213,12 @@ class LiveTrader:
             pos = self.positions[symbol]
             self._update_price_tracking(pos, snap.price)
 
-            # SL/TP/trailing are all on Binance — only check software exits
+            # Stage 2: upgrade BE-trailing → real trailing (one-time)
+            if symbol not in self._trail_upgraded:
+                if self._should_upgrade_trail(pos, snap.price, snap.adaptive):
+                    await self._upgrade_to_real_trail(pos, snap.adaptive)
+
+            # Software exits (CVD divergence, time stop)
             reason = self._check_software_exits(pos, snap)
             if reason:
                 p = await self.close_position(symbol, reason)
@@ -277,12 +291,13 @@ class LiveTrader:
             original_risk=abs(entry - sl_price),
         )
 
-    async def _place_protective_orders(
+    async def _place_stage1_orders(
         self, pos: Position, ap: AdaptiveParams,
     ) -> bool:
+        """Stage 1: SL (original risk) + TP + BE-trailing on Binance."""
         close_side = "SELL" if pos.direction == Direction.LONG else "BUY"
 
-        # 1. Hard-floor SL (STOP_MARKET)
+        # 1. Hard SL (STOP_MARKET — original risk level)
         sl_resp = await self.executor.place_stop_loss(
             pos.symbol, close_side, pos.quantity, pos.sl_price,
         )
@@ -297,28 +312,86 @@ class LiveTrader:
         if tp_resp.get("orderId"):
             pos.tp_order_id = tp_resp["orderId"]
 
-        # 3. Trailing stop (TRAILING_STOP_MARKET) — Binance handles natively
-        activation, callback = self._calc_trailing_params(pos, ap)
-        if callback > 0:
+        # 3. BE-trailing (TRAILING_STOP_MARKET — small callbackRate)
+        #    Activates at BE trigger; when it fires, stop ≈ entry+fees
+        be_activation, be_callback = self._calc_be_trailing_params(pos, ap)
+        if be_callback > 0:
             trail_resp = await self.executor.place_trailing_stop(
                 symbol=pos.symbol,
                 side=close_side,
                 quantity=pos.quantity,
-                callback_rate=callback,
-                activation_price=activation,
+                callback_rate=be_callback,
+                activation_price=be_activation,
             )
             if trail_resp.get("orderId"):
                 pos.trail_order_id = trail_resp["orderId"]
                 logger.info(
-                    f"[LIVE] Trailing set {pos.symbol} "
-                    f"activation={activation:.6f} callback={callback}%",
+                    f"[LIVE] BE-trail set {pos.symbol} "
+                    f"activation={be_activation:.6f} "
+                    f"callback={be_callback}%",
                 )
             else:
                 logger.warning(
-                    f"[LIVE] Trailing placement failed for {pos.symbol}, "
+                    f"[LIVE] BE-trail placement failed {pos.symbol}, "
                     f"continuing with SL+TP only",
                 )
         return True
+
+    @staticmethod
+    def _should_upgrade_trail(
+        pos: Position, price: float, ap: AdaptiveParams,
+    ) -> bool:
+        """Check if price reached real trailing activation level."""
+        entry = pos.entry_price
+        atr_val = ap.atr_value
+        if atr_val > 0:
+            activation_dist = atr_val * ap.trail_activation_atr
+        else:
+            risk = pos.original_risk or abs(entry - pos.sl_price)
+            activation_dist = risk * TRAILING_ACTIVATION_RR
+
+        if pos.direction == Direction.LONG:
+            return price >= entry + activation_dist
+        return price <= entry - activation_dist
+
+    async def _upgrade_to_real_trail(
+        self, pos: Position, ap: AdaptiveParams,
+    ) -> None:
+        """Stage 2: Cancel BE-trailing → place real trailing.
+
+        Only the trailing order is replaced. SL and TP stay untouched.
+        """
+        close_side = "SELL" if pos.direction == Direction.LONG else "BUY"
+
+        # Cancel just the BE-trailing order
+        if pos.trail_order_id:
+            await self.executor.cancel_order(pos.symbol, pos.trail_order_id)
+            pos.trail_order_id = 0
+
+        # Place real trailing (activates immediately — price already past)
+        activation, callback = self._calc_real_trailing_params(pos, ap)
+        if callback <= 0:
+            self._trail_upgraded.add(pos.symbol)
+            return
+
+        trail_resp = await self.executor.place_trailing_stop(
+            symbol=pos.symbol,
+            side=close_side,
+            quantity=pos.quantity,
+            callback_rate=callback,
+            activation_price=activation,
+        )
+        if trail_resp.get("orderId"):
+            pos.trail_order_id = trail_resp["orderId"]
+            logger.info(
+                f"[LIVE] Trail upgraded {pos.symbol} "
+                f"activation={activation:.6f} callback={callback}%",
+            )
+        else:
+            logger.warning(
+                f"[LIVE] Real trail placement failed {pos.symbol}",
+            )
+        self._trail_upgraded.add(pos.symbol)
 
     async def _emergency_close(self, pos: Position) -> None:
         """SL placement failed -> immediately market close (rule 9)."""
@@ -326,32 +399,21 @@ class LiveTrader:
         await self.executor.market_close(pos.symbol, side, pos.quantity)
         logger.error(f"[LIVE] Emergency close {pos.symbol} -- SL failed")
 
-    async def _update_exchange_sl(self, pos: Position) -> None:
-        """Cancel old orders and re-place. Used only for software close."""
-        await self.executor.cancel_all(pos.symbol)
-        close_side = "SELL" if pos.direction == Direction.LONG else "BUY"
-        sl_resp = await self.executor.place_stop_loss(
-            pos.symbol, close_side, pos.quantity, pos.sl_price,
-        )
-        if sl_resp.get("orderId"):
-            pos.sl_order_id = sl_resp["orderId"]
-        else:
-            logger.error(
-                f"[LIVE] SL re-place failed for {pos.symbol}, "
-                f"emergency close",
-            )
-            await self._emergency_close(pos)
-            self.positions.pop(pos.symbol, None)
-
     # -- trailing params calculation ----------------------------------------
 
     @staticmethod
-    def _calc_trailing_params(
+    def _calc_be_trailing_params(
         pos: Position, ap: AdaptiveParams,
     ) -> tuple[float, float]:
-        """Calculate (activation_price, callback_rate) for TRAILING_STOP_MARKET.
+        """Calculate BE-trailing (activation_price, callback_rate).
 
-        Returns callback_rate in [0.1, 5.0] percent range.
+        The BE-trailing activates when price reaches breakeven trigger.
+        Its callbackRate is small so that when it fires, the stop
+        lands near entry + fees (breakeven).
+
+        For LONG: activation = entry + be_trigger
+                  callback = (activation - be_stop) / activation * 100
+                  where be_stop = entry + fee_buffer
         """
         entry = pos.entry_price
         if entry <= 0:
@@ -359,14 +421,53 @@ class LiveTrader:
 
         atr_val = ap.atr_value
         if atr_val > 0:
-            activation_dist = atr_val * ap.trail_activation_atr
+            be_trigger = atr_val * ap.breakeven_trigger_atr
+        else:
+            risk = pos.original_risk or abs(entry - pos.sl_price)
+            be_trigger = risk * BREAKEVEN_TRIGGER_RR
+
+        if be_trigger <= 0:
+            return 0.0, 0.0
+
+        fee_buffer = entry * (MAKER_FEE + TAKER_FEE)
+
+        if pos.direction == Direction.LONG:
+            activation = entry + be_trigger
+            be_stop = entry + fee_buffer
+            # callback% = (activation - be_stop) / activation * 100
+            callback = (activation - be_stop) / activation * 100
+        else:
+            activation = entry - be_trigger
+            be_stop = entry - fee_buffer
+            # callback% = (be_stop - activation) / activation * 100
+            callback = (be_stop - activation) / activation * 100
+
+        callback = round(callback, 1)
+        callback = max(MIN_CALLBACK_RATE, min(MAX_CALLBACK_RATE, callback))
+        return activation, callback
+
+    @staticmethod
+    def _calc_real_trailing_params(
+        pos: Position, ap: AdaptiveParams,
+    ) -> tuple[float, float]:
+        """Calculate real trailing (activation_price, callback_rate).
+
+        Activation is set at entry so trailing activates immediately
+        (price is already past real trail activation at this point).
+        callbackRate is the proper ATR-based trail distance.
+        """
+        entry = pos.entry_price
+        if entry <= 0:
+            return 0.0, 0.0
+
+        atr_val = ap.atr_value
+        if atr_val > 0:
             trail_dist = max(
                 atr_val * ap.trail_distance_atr,
                 entry * MIN_TRAIL_PCT,
             )
         else:
             risk = pos.original_risk or abs(entry - pos.sl_price)
-            activation_dist = risk * TRAILING_ACTIVATION_RR
             trail_dist = max(
                 risk * TRAILING_RISK_FACTOR,
                 entry * MIN_TRAIL_PCT,
@@ -376,12 +477,8 @@ class LiveTrader:
         callback = round((trail_dist / entry) * 100, 1)
         callback = max(MIN_CALLBACK_RATE, min(MAX_CALLBACK_RATE, callback))
 
-        if pos.direction == Direction.LONG:
-            activation = entry + activation_dist
-        else:
-            activation = entry - activation_dist
-
-        return activation, callback
+        # Activate at entry — will trigger immediately since price > entry
+        return entry, callback
 
     # -- price tracking & exit logic ----------------------------------------
 

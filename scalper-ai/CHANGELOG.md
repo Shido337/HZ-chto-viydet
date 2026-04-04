@@ -39,3 +39,7 @@ Files: core/live_trader.py, exchange/order_executor.py, exchange/binance_client.
 ## [2026-04-04 18:27 UTC]
 Exchange-native trailing stop: TRAILING_STOP_MARKET replaces software trailing/breakeven in LiveTrader
 Files: core/live_trader.py, exchange/order_executor.py, core/signal_generator.py
+
+## [2026-04-04 18:35 UTC]
+2-stage trailing: BE-trail at entry + real trail upgrade on activation
+Files: core/live_trader.py
