@@ -12,6 +12,7 @@ from core.paper_trader import PaperTrader
 from core.regime_classifier import RegimeClassifier
 from core.risk_manager import RiskManager
 from core.signal_generator import Signal
+from core.coin_screener import CoinScreener, SCREENER_INTERVAL
 from data.cache import MarketCache, MarketRegime
 from exchange.binance_client import BinanceClient
 from exchange.binance_ws import BinanceWS
@@ -59,8 +60,11 @@ class BotEngine:
         self.trader: PaperTrader = PaperTrader(self.cache)
         self.mode = "paper"
 
-        # Volatile altcoins (10-60% daily swings)
-        self.symbols: list[str] = [
+        # Dynamic coin screening (replaces hardcoded symbols)
+        self.screener = CoinScreener()
+        self.symbols: list[str] = []
+        # Fallback if screening fails
+        self._fallback_symbols: list[str] = [
             "1000PEPEUSDT", "1000FLOKIUSDT", "WIFUSDT", "1000BONKUSDT",
             "ORDIUSDT", "1000SHIBUSDT", "FETUSDT", "APEUSDT",
             "GALAUSDT", "TURBOUSDT", "MEMEUSDT", "PEOPLEUSDT",
@@ -77,20 +81,28 @@ class BotEngine:
         self._on_regime: Any = None
         self.signals: list[Signal] = []
         self._signal_cooldown: dict[str, float] = {}  # symbol → last signal time
+        self._last_screen_time = 0.0
+        self._testnet = False
 
     # -- lifecycle ----------------------------------------------------------
 
     async def start(self) -> None:
-        testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
+        self._testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
         await self.client.start()
         balance = await self.client.get_balance()
         self.risk.session_start_balance = balance if balance > 0 else 10000.0
         logger.info(f"Starting balance: ${self.risk.session_start_balance:.2f}")
 
+        # Dynamic coin screening
+        await self._run_screening()
+        if not self.symbols:
+            logger.warning("Screening returned 0 coins, using fallback list")
+            self.symbols = list(self._fallback_symbols)
+
         self._init_symbols()
         await self._load_historical_klines()
         await self._update_regimes()
-        await self._start_ws(testnet)
+        await self._start_ws(self._testnet)
         self._running = True
         self._main_task = asyncio.create_task(self._main_loop())
 
@@ -145,6 +157,10 @@ class BotEngine:
         if now - self._last_regime_update >= REGIME_UPDATE_INTERVAL:
             await self._update_regimes()
             self._last_regime_update = now
+
+        # Periodic coin re-screening
+        if now - self._last_screen_time >= SCREENER_INTERVAL:
+            await self._rotate_symbols()
 
         # Periodic status log (every 60s)
         if now - self._last_status_log >= 60:
@@ -449,6 +465,74 @@ class BotEngine:
             self._ws.subscribe(f"{sl}@bookTicker", self._make_book_handler(s))
             self._ws.subscribe(f"{sl}@aggTrade", self._make_agg_handler(s))
         await self._ws.start()
+
+    # -- dynamic coin screening ---------------------------------------------
+
+    async def _run_screening(self) -> None:
+        """Fetch tickers from Binance and screen for best scalping coins."""
+        try:
+            # Load perpetual symbols list (once)
+            if not self.screener._perpetual_symbols:
+                perp_info = await self.client.get_exchange_info_symbols()
+                self.screener.set_perpetual_symbols(perp_info)
+
+            tickers = await self.client.get_all_tickers_24hr()
+            book_tickers = await self.client.get_all_book_tickers()
+            selected = self.screener.screen(tickers, book_tickers)
+            if selected:
+                self.symbols = selected
+            self._last_screen_time = time.time()
+        except Exception:
+            logger.exception("Coin screening failed")
+            if not self.symbols:
+                self.symbols = list(self._fallback_symbols)
+
+    async def _rotate_symbols(self) -> None:
+        """Re-screen coins and reconnect WS if symbol set changed."""
+        old_symbols = set(self.symbols)
+        await self._run_screening()
+        new_symbols = set(self.symbols)
+
+        if old_symbols == new_symbols:
+            return
+
+        added = new_symbols - old_symbols
+        removed = old_symbols - new_symbols
+
+        # Don't remove symbols with open positions
+        open_syms = set(self.trader.positions.keys())
+        kept_from_removed = removed & open_syms
+        if kept_from_removed:
+            logger.info(f"Keeping {kept_from_removed} (open positions)")
+            removed -= kept_from_removed
+            self.symbols = list(new_symbols | kept_from_removed)
+
+        if not added and not removed:
+            return
+
+        logger.info(
+            f"Symbol rotation: +{len(added)} -{len(removed)} "
+            f"(added={added}, removed={removed})",
+        )
+
+        # Init cache for new symbols
+        for s in added:
+            self.cache.init_symbol(s)
+
+        # Load historical klines for new symbols
+        for s in added:
+            for tf, limit in [("1m", 500), ("3m", 500), ("5m", 500)]:
+                try:
+                    candles = await self.client.get_klines(s, tf, limit)
+                    if candles:
+                        self.cache.load_klines(s, tf, candles)
+                except Exception:
+                    logger.warning(f"Failed to load {tf} klines for {s}")
+
+        # Reconnect WS with new symbol set
+        if self._ws:
+            await self._ws.stop()
+        await self._start_ws(self._testnet)
 
     # -- WS handlers --------------------------------------------------------
 

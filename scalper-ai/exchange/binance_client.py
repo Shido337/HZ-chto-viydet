@@ -195,6 +195,29 @@ class BinanceClient:
         )
         return data if isinstance(data, dict) else {}
 
+    # -- screening endpoints (public, unsigned) -----------------------------
+
+    async def get_all_tickers_24hr(self) -> list[dict[str, Any]]:
+        """GET /fapi/v1/ticker/24hr — weight 40 (no symbol)."""
+        data = await self._request("GET", "/fapi/v1/ticker/24hr")
+        return data if isinstance(data, list) else []
+
+    async def get_all_book_tickers(self) -> list[dict[str, Any]]:
+        """GET /fapi/v1/ticker/bookTicker — weight 5 (no symbol)."""
+        data = await self._request("GET", "/fapi/v1/ticker/bookTicker")
+        return data if isinstance(data, list) else []
+
+    async def get_exchange_info_symbols(self) -> list[dict[str, Any]]:
+        """Extract symbol list from exchangeInfo (perpetual USDT-M only)."""
+        info = await self.get_exchange_info()
+        symbols = info.get("symbols", [])
+        return [
+            s for s in symbols
+            if s.get("contractType") == "PERPETUAL"
+            and s.get("quoteAsset") == "USDT"
+            and s.get("status") == "TRADING"
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Helpers

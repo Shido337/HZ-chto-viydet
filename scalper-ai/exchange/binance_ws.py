@@ -33,6 +33,10 @@ class BinanceWS:
         """Register *stream* → *handler* mapping before calling run()."""
         self._handlers[stream] = handler
 
+    def clear_subscriptions(self) -> None:
+        """Remove all stream subscriptions (call before re-subscribing)."""
+        self._handlers.clear()
+
     async def start(self) -> None:
         from aiohttp.resolver import ThreadedResolver
 
