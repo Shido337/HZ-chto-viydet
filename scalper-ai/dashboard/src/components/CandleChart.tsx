@@ -57,35 +57,34 @@ export const CandleChart: React.FC = () => {
   // Full data load on symbol or timeframe change
   const prevSymRef = useRef('');
   const prevTfRef = useRef('');
-  const dataLoadedRef = useRef(false);
   const fetchingRef = useRef('');
+
+  // Force-fetch klines on symbol change to guarantee data
+  useEffect(() => {
+    if (!symbol) return;
+    const fetchKey = `${symbol}`;
+    if (fetchingRef.current === fetchKey) return;
+    fetchingRef.current = fetchKey;
+    fetch(`/api/klines/${symbol}`)
+      .then((r) => r.json())
+      .then((data) => {
+        useTradingStore.getState().setSnapshot(data);
+      })
+      .catch(() => {})
+      .finally(() => { fetchingRef.current = ''; });
+  }, [symbol]);
+
   useEffect(() => {
     if (!seriesRef.current || !snap) return;
     const klines =
       tf === '1m' ? snap.klines_1m : tf === '3m' ? snap.klines_3m : snap.klines_5m;
 
-    // Fetch klines via REST if missing (e.g. after symbol rotation or partial load)
-    if (!klines?.length) {
-      const fetchKey = `${symbol}_${tf}`;
-      if (fetchingRef.current !== fetchKey) {
-        fetchingRef.current = fetchKey;
-        fetch(`/api/klines/${symbol}`)
-          .then((r) => r.json())
-          .then((data) => {
-            const store = useTradingStore.getState();
-            store.setSnapshot(data);
-          })
-          .catch(() => {})
-          .finally(() => { fetchingRef.current = ''; });
-      }
-      return;
-    }
+    if (!klines?.length) return;
 
-    // Full setData on first load or symbol/tf change
-    if (!dataLoadedRef.current || prevSymRef.current !== symbol || prevTfRef.current !== tf) {
+    // Full setData on symbol/tf change
+    if (prevSymRef.current !== symbol || prevTfRef.current !== tf) {
       prevSymRef.current = symbol;
       prevTfRef.current = tf;
-      dataLoadedRef.current = true;
       const data: CandlestickData[] = klines.map((k) => ({
         time: (k.t / 1000) as Time,
         open: k.o,
