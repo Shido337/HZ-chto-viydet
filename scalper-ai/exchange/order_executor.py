@@ -16,6 +16,7 @@ LEVERAGE = 25
 GTX_REJECT_CODE = -5022
 MAX_RETRIES = 3
 RETRY_DELAY = 0.3
+ENTRY_FILL_WAIT = 1.5  # seconds to wait for GTX fill before checking
 
 
 class OrderExecutor:
@@ -99,7 +100,7 @@ class OrderExecutor:
         except Exception:
             pass  # already ISOLATED
 
-    # -- entry order (GTX → FOK fallback) -----------------------------------
+    # -- entry order (GTX → IOC fallback) ------------------------------------
 
     async def place_limit_entry(
         self,
@@ -108,7 +109,17 @@ class OrderExecutor:
         quantity: float,
         price: float,
     ) -> dict[str, Any]:
-        """GTX post-only limit.  Falls back to FOK if GTX rejected."""
+        """GTX post-only limit.  Falls back to IOC if GTX rejected.
+
+        Returns response only if order is FILLED (has executedQty > 0).
+        Cancelled / expired GTX orders return empty dict.
+        """
+        # Round values for Binance
+        quantity = self.round_quantity(symbol, quantity)
+        price = self.round_price(symbol, price)
+        if quantity <= 0:
+            return {}
+
         resp = await self.client.place_order(
             symbol=symbol,
             side=side,
@@ -119,15 +130,45 @@ class OrderExecutor:
         )
         code = resp.get("code")
         if code == GTX_REJECT_CODE:
-            logger.warning(f"GTX rejected for {symbol}, using FOK fallback")
+            logger.warning(f"GTX rejected for {symbol}, using IOC fallback")
             resp = await self.client.place_order(
                 symbol=symbol,
                 side=side,
                 type="LIMIT",
-                timeInForce="FOK",
+                timeInForce="IOC",
                 quantity=quantity,
                 price=price,
             )
+
+        # Verify the order actually filled
+        order_id = resp.get("orderId")
+        if not order_id:
+            return {}
+
+        status = resp.get("status", "")
+        executed = float(resp.get("executedQty", 0))
+
+        # GTX orders may be NEW (pending) — wait briefly for fill
+        if status == "NEW":
+            await asyncio.sleep(ENTRY_FILL_WAIT)
+            check = await self.client.get_order(symbol, order_id)
+            status = check.get("status", "")
+            executed = float(check.get("executedQty", 0))
+            if status not in ("FILLED", "PARTIALLY_FILLED") or executed <= 0:
+                # Not filled — cancel and abort
+                await self.client.cancel_order(symbol, order_id)
+                logger.warning(
+                    f"Entry not filled for {symbol} (status={status}), cancelled",
+                )
+                return {}
+            resp = check
+
+        if status == "EXPIRED" or executed <= 0:
+            logger.warning(f"Entry {status} for {symbol}, no fill")
+            return {}
+
+        # Return with actual fill qty
+        resp["filledQty"] = executed
         return resp
 
     # -- protective orders --------------------------------------------------
@@ -170,7 +211,14 @@ class OrderExecutor:
         stop_price: float,
         order_type: str,
     ) -> dict[str, Any]:
-        """SL/TP with workingType=MARK_PRICE, reduceOnly=true."""
+        """SL/TP with workingType=MARK_PRICE, reduceOnly=true.
+
+        Uses rounded quantity and stopPrice for Binance acceptance.
+        """
+        quantity = self.round_quantity(symbol, quantity)
+        stop_price = self.round_price(symbol, stop_price)
+        if quantity <= 0 or stop_price <= 0:
+            return {}
         for attempt in range(1, MAX_RETRIES + 1):
             resp = await self.client.place_order(
                 symbol=symbol,
@@ -197,6 +245,10 @@ class OrderExecutor:
         self, symbol: str, side: str, quantity: float,
     ) -> dict[str, Any]:
         """Emergency market close — used when SL placement fails."""
+        quantity = self.round_quantity(symbol, quantity)
+        if quantity <= 0:
+            logger.error(f"Market close {symbol}: qty rounds to 0")
+            return {}
         logger.error(f"Emergency market close {symbol} {side} qty={quantity}")
         return await self.client.place_order(
             symbol=symbol,

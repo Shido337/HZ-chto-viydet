@@ -195,6 +195,25 @@ class BinanceClient:
         )
         return data if isinstance(data, dict) else {}
 
+    async def get_order(self, symbol: str, order_id: int) -> dict[str, Any]:
+        data = await self._request(
+            "GET", "/fapi/v1/order",
+            params={"symbol": symbol, "orderId": order_id},
+            signed=True,
+        )
+        return data if isinstance(data, dict) else {}
+
+    # -- user data stream (listenKey) ---------------------------------------
+
+    async def create_listen_key(self) -> str:
+        data = await self._request(
+            "POST", "/fapi/v1/listenKey", signed=False,
+        )
+        return data.get("listenKey", "") if isinstance(data, dict) else ""
+
+    async def keepalive_listen_key(self) -> None:
+        await self._request("PUT", "/fapi/v1/listenKey", signed=False)
+
     # -- screening endpoints (public, unsigned) -----------------------------
 
     async def get_all_tickers_24hr(self) -> list[dict[str, Any]]:

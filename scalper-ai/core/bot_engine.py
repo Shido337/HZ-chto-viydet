@@ -69,6 +69,9 @@ class BotEngine:
             "GALAUSDT", "TURBOUSDT", "MEMEUSDT", "PEOPLEUSDT",
         ]
         self._ws: BinanceWS | None = None
+        self._user_ws: BinanceWS | None = None  # user data stream for order events
+        self._listen_key: str = ""
+        self._listen_key_task: asyncio.Task[None] | None = None
         self._running = False
         self._main_task: asyncio.Task[None] | None = None
         self._consecutive_errors = 0
@@ -113,12 +116,16 @@ class BotEngine:
 
     async def stop(self) -> None:
         self._running = False
+        if self._listen_key_task and not self._listen_key_task.done():
+            self._listen_key_task.cancel()
         if self._main_task and not self._main_task.done():
             self._main_task.cancel()
             try:
                 await self._main_task
             except asyncio.CancelledError:
                 pass
+        if self._user_ws:
+            await self._user_ws.stop()
         if self._ws:
             await self._ws.stop()
         await self.client.close()
@@ -136,10 +143,14 @@ class BotEngine:
         logger.info(f"Trader switched to {mode}")
 
     async def recover_live_positions(self) -> None:
-        """Recover open positions from exchange (call after switch to live)."""
+        """Recover open positions from exchange (call after switch to live).
+
+        Also starts user data stream for order event notifications.
+        """
         if self.mode != "live" or not hasattr(self.trader, "recover_positions"):
             return
         await self.trader.recover_positions()
+        await self._start_user_data_stream()
         logger.info(f"Recovered {self.trader.open_count} live positions")
 
     # -- main loop ----------------------------------------------------------
@@ -706,3 +717,51 @@ class BotEngine:
             "EarlyMomentum": "EARLY_MOMENTUM",
         }
         return mapping.get(cls_name, cls_name)
+
+    # -- user data stream (live mode only) ----------------------------------
+
+    async def _start_user_data_stream(self) -> None:
+        """Start Binance user data WS for ORDER_TRADE_UPDATE events."""
+        try:
+            self._listen_key = await self.client.create_listen_key()
+            if not self._listen_key:
+                logger.error("Failed to create listen key for user data stream")
+                return
+
+            self._user_ws = BinanceWS(testnet=self._testnet)
+            self._user_ws.subscribe(
+                self._listen_key,
+                self._handle_user_data,
+            )
+            await self._user_ws.start()
+            # Keepalive every 30 min
+            self._listen_key_task = asyncio.create_task(
+                self._keepalive_loop(),
+            )
+            logger.info("User data stream started")
+        except Exception:
+            logger.exception("Failed to start user data stream")
+
+    async def _keepalive_loop(self) -> None:
+        """Send keepalive for listen key every 30 minutes."""
+        while self._running:
+            await asyncio.sleep(30 * 60)
+            try:
+                await self.client.keepalive_listen_key()
+                logger.debug("Listen key keepalive sent")
+            except Exception:
+                logger.warning("Listen key keepalive failed, recreating")
+                try:
+                    self._listen_key = await self.client.create_listen_key()
+                except Exception:
+                    logger.exception("Failed to recreate listen key")
+
+    async def _handle_user_data(self, data: dict[str, Any]) -> None:
+        """Route user data stream events to LiveTrader."""
+        event_type = data.get("e", "")
+        if event_type == "ORDER_TRADE_UPDATE":
+            if hasattr(self.trader, "on_order_update"):
+                await self.trader.on_order_update(data)
+        elif event_type == "ACCOUNT_UPDATE":
+            # Could track balance changes here
+            pass

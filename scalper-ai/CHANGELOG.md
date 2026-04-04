@@ -31,3 +31,7 @@ Files: strategies/continuation_break.py, strategies/mean_reversion.py, strategie
 ## [2026-04-04 17:42 UTC]
 Live trader ready: adaptive params, symbol precision, position recovery
 Files: core/live_trader.py, exchange/order_executor.py, core/bot_engine.py, server/api.py
+
+## [2026-04-04 17:51 UTC]
+Fix live order lifecycle: fill verification, user data stream, throttled SL, exchange event sync
+Files: core/live_trader.py, exchange/order_executor.py, exchange/binance_client.py, core/bot_engine.py
