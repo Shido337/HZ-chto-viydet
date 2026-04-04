@@ -215,7 +215,7 @@ class OrderExecutor:
 
         callbackRate: 0.1–5.0 (percentage, step 0.1).
         activationPrice: price at which trailing begins.
-        workingType=MARK_PRICE, reduceOnly=true.
+        workingType=CONTRACT_PRICE, reduceOnly=true.
         """
         quantity = self.round_quantity(symbol, quantity)
         activation_price = self.round_price(symbol, activation_price)
@@ -231,7 +231,7 @@ class OrderExecutor:
                 callbackRate=callback_rate,
                 activationPrice=activation_price,
                 quantity=quantity,
-                workingType="MARK_PRICE",
+                workingType="CONTRACT_PRICE",
                 reduceOnly="true",
             )
             if resp.get("orderId"):
@@ -252,7 +252,7 @@ class OrderExecutor:
         stop_price: float,
         order_type: str,
     ) -> dict[str, Any]:
-        """SL/TP with workingType=MARK_PRICE, reduceOnly=true.
+        """SL/TP with workingType=CONTRACT_PRICE (Last Price), reduceOnly=true.
 
         Uses rounded quantity and stopPrice for Binance acceptance.
         """
@@ -267,7 +267,7 @@ class OrderExecutor:
                 type=order_type,
                 stopPrice=stop_price,
                 quantity=quantity,
-                workingType="MARK_PRICE",
+                workingType="CONTRACT_PRICE",
                 reduceOnly="true",
             )
             if resp.get("orderId"):

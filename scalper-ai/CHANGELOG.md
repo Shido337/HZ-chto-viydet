@@ -47,3 +47,7 @@ Files: core/live_trader.py
 ## [2026-04-04 19:13 UTC]
 Fix CB strategy: structural SL from prev candle, min/max risk guards 0.1-1.5%, swing lookback 8
 Files: strategies/continuation_break.py
+
+## [2026-04-04 19:15 UTC]
+Switch workingType from MARK_PRICE to CONTRACT_PRICE (Last Price) for SL/TP/trailing
+Files: exchange/order_executor.py
