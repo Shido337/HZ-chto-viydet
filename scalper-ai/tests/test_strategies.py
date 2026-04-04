@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from core.signal_generator import ScoreComponents, Signal
-from data.cache import MarketRegime, MarketSnapshot, IndicatorSet
+from data.cache import AdaptiveParams, MarketRegime, MarketSnapshot, IndicatorSet
 from strategies.continuation_break import ContinuationBreak
 from strategies.mean_reversion import MeanReversion
 from strategies.early_momentum import EarlyMomentum
@@ -20,32 +20,45 @@ def _candle(o: float, h: float, l: float, c: float, v: float = 100.0, t: int = 0
 
 
 def _make_trending_bull_snapshot() -> MarketSnapshot:
-    """Build a snapshot that should trigger CONTINUATION_BREAK LONG."""
-    # 3m klines: strong uptrend with a structure break on last candle
+    """Build snapshot for CB LONG: break above swing high, then pullback retest."""
+    # 16 candles of range: oscillating between 100.0 and 100.15
     klines_3m = []
-    for i in range(25):
-        base = 100 + i * 0.5
-        klines_3m.append(_candle(base, base + 0.4, base - 0.1, base + 0.3, 100.0, i * 180000))
-    # Last candle: big bullish break (body ≥ 0.15%)
-    last_o = 112.0
-    last_c = 112.5  # body = 0.5/112 = 0.45%
-    klines_3m.append(_candle(last_o, last_c + 0.1, last_o - 0.1, last_c, 500.0, 25 * 180000))
+    for i in range(16):
+        o = 100.0 + (i % 2) * 0.15
+        c = 100.0 + ((i + 1) % 2) * 0.15
+        h = max(o, c) + 0.05
+        l_val = min(o, c) - 0.05
+        klines_3m.append(_candle(o, h, l_val, c, 100.0, i * 180000))
+    # swing_h from prefix[-8:] = max(h) = 100.20
 
-    # 1m klines: last 3 closes ascending (bullish momentum)
+    # Last 5 candles (BREAK_LOOKBACK):
+    # [16] break candle — bullish close above 100.20
+    klines_3m.append(_candle(100.1, 100.5, 100.0, 100.4, 500.0, 16 * 180000))
+    # [17-20] pullback toward broken level 100.20
+    klines_3m.append(_candle(100.4, 100.45, 100.2, 100.25, 100.0, 17 * 180000))
+    klines_3m.append(_candle(100.25, 100.3, 100.18, 100.22, 100.0, 18 * 180000))
+    klines_3m.append(_candle(100.22, 100.3, 100.15, 100.2, 100.0, 19 * 180000))
+    klines_3m.append(_candle(100.2, 100.25, 100.15, 100.22, 100.0, 20 * 180000))
+
+    # 1m klines with volume spike on recent candles
     klines_1m = []
     for i in range(25):
-        p = 110 + i * 0.1
-        klines_1m.append(_candle(p, p + 0.2, p - 0.05, p + 0.15, 200.0 if i < 20 else 500.0, i * 60000))
+        p = 100.0 + i * 0.01
+        klines_1m.append(_candle(
+            p, p + 0.02, p - 0.01, p + 0.015,
+            200.0 if i < 20 else 600.0, i * 60000,
+        ))
 
     return MarketSnapshot(
         symbol="BTCUSDT",
-        price=112.5,
-        bid=112.5,
-        ask=112.51,
+        price=100.22,
+        bid=100.22,
+        ask=100.23,
         bid_qty=1000.0,
         ask_qty=300.0,
         regime=MarketRegime.TRENDING_BULL,
-        indicators=IndicatorSet(adx=30.0, atr=0.5, ema9=112.0, ema21=111.0),
+        indicators=IndicatorSet(adx=30.0, atr=0.3, ema9=100.2, ema21=100.0),
+        adaptive=AdaptiveParams(atr_value=0.3, ob_min=0.55, volume_spike_min=0.7),
         cvd=500.0,
         cvd_delta_1m=50.0,
         volume_1m=500.0,

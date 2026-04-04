@@ -50,7 +50,7 @@ class BotEngine:
             EarlyMomentum(),
         ]
         self.strategy_enabled = {
-            "CONTINUATION_BREAK": False,  # disabled: WR=23%, PnL=-$5.67 over 47 trades
+            "CONTINUATION_BREAK": True,   # redesigned: break & retest (limit entry on pullback)
             "MEAN_REVERSION": True,
             "EARLY_MOMENTUM": True,
         }
