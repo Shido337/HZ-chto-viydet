@@ -1,26 +1,24 @@
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from core.signal_generator import Direction, Position, Signal
-from data.cache import AdaptiveParams, MarketCache
+from data.cache import MarketCache
 
 if TYPE_CHECKING:
-    from data.cache import MarketSnapshot
+    from data.cache import AdaptiveParams, MarketSnapshot
     from exchange.binance_client import BinanceClient
     from exchange.order_executor import OrderExecutor
 
 # ---------------------------------------------------------------------------
-# Constants (fallbacks -- adaptive params override when available)
+# Constants
 # ---------------------------------------------------------------------------
-TRAILING_ACTIVATION_RR = 0.5
-TRAILING_RISK_FACTOR = 0.4
-MIN_TRAIL_PCT = 0.0003
-BREAKEVEN_TRIGGER_RR = 0.6
+TRAILING_ACTIVATION_RR = 0.5  # fallback if no ATR
+TRAILING_RISK_FACTOR = 0.4    # fallback trail distance
+MIN_TRAIL_PCT = 0.0003        # 0.03% absolute minimum trail
 MAX_HOLD_MINUTES = 8
 MAX_HOLD_IF_PROFIT = 12
 LEVERAGE = 25
@@ -29,18 +27,18 @@ CVD_EXIT_MIN_ATR_MULT = 0.5
 CVD_EXIT_MIN_HOLD_SEC = 120
 MAKER_FEE = 0.0002
 TAKER_FEE = 0.0004
-# Throttle: minimum seconds between exchange SL updates per symbol
-SL_UPDATE_THROTTLE = 3.0
+# Binance callbackRate limits
+MIN_CALLBACK_RATE = 0.1  # 0.1%
+MAX_CALLBACK_RATE = 5.0  # 5.0%
 
 
 class LiveTrader:
     """Real exchange execution with full position lifecycle.
 
-    Mirrors PaperTrader adaptive exit logic (trailing, BE, CVD exit,
-    time stop) but sends real orders to Binance via OrderExecutor.
-
-    Listens for ORDER_TRADE_UPDATE events from user data stream so
-    we know when exchange-side SL/TP fires (no double-action).
+    Places SL + TP + TRAILING_STOP_MARKET on Binance at entry.
+    Exchange handles trailing natively — no software trailing needed.
+    Software only manages CVD divergence exit and time stop.
+    Listens for ORDER_TRADE_UPDATE events from user data stream.
     """
 
     def __init__(
@@ -53,9 +51,7 @@ class LiveTrader:
         self.client = client
         self.executor = executor
         self.positions: dict[str, Position] = {}
-        # Track last SL update time per symbol to avoid rate limiting
-        self._last_sl_update: dict[str, float] = {}
-        # Positions closed by exchange (SL/TP hit on Binance side)
+        # Positions closed by exchange (SL/TP/trailing hit on Binance side)
         self._exchange_closed: dict[str, str] = {}  # symbol -> reason
 
     @property
@@ -67,13 +63,13 @@ class LiveTrader:
     async def on_order_update(self, data: dict[str, Any]) -> None:
         """Handle ORDER_TRADE_UPDATE from Binance user data stream.
 
-        Detects when exchange-side SL or TP fires so we dont try to
-        close the position again ourselves.
+        Detects when exchange-side SL, TP, or trailing fires so we
+        dont try to close the position again ourselves.
         """
         order = data.get("o", {})
         symbol = order.get("s", "")
         status = order.get("X", "")  # FILLED, PARTIALLY_FILLED, etc.
-        order_type = order.get("ot", "")  # STOP_MARKET, TAKE_PROFIT_MARKET
+        order_type = order.get("ot", "")  # STOP_MARKET, TAKE_PROFIT_MARKET, TRAILING_STOP_MARKET
         reduce_only = order.get("R", False)  # reduceOnly flag
 
         if symbol not in self.positions:
@@ -82,11 +78,10 @@ class LiveTrader:
         if status != "FILLED":
             return
 
-        pos = self.positions[symbol]
+        realized_pnl = float(order.get("rp", 0))
 
         # Exchange SL fired
         if order_type == "STOP_MARKET" and reduce_only:
-            realized_pnl = float(order.get("rp", 0))
             logger.info(
                 f"[LIVE] Exchange SL FILLED {symbol} "
                 f"realized_pnl={realized_pnl:+.4f}",
@@ -95,12 +90,19 @@ class LiveTrader:
 
         # Exchange TP fired
         elif order_type == "TAKE_PROFIT_MARKET" and reduce_only:
-            realized_pnl = float(order.get("rp", 0))
             logger.info(
                 f"[LIVE] Exchange TP FILLED {symbol} "
                 f"realized_pnl={realized_pnl:+.4f}",
             )
             self._exchange_closed[symbol] = "tp_hit"
+
+        # Exchange trailing stop fired
+        elif order_type == "TRAILING_STOP_MARKET" and reduce_only:
+            logger.info(
+                f"[LIVE] Exchange TRAILING FILLED {symbol} "
+                f"realized_pnl={realized_pnl:+.4f}",
+            )
+            self._exchange_closed[symbol] = "trailing_stop"
 
     # -- open position ------------------------------------------------------
 
@@ -138,7 +140,10 @@ class LiveTrader:
             signal, size_usdt, filled_qty, entry_resp,
             sl_price, tp_price, avg_price,
         )
-        ok = await self._place_protective_orders(pos)
+
+        # Get adaptive params for trailing calculation
+        snap = self.cache.get_snapshot(signal.symbol)
+        ok = await self._place_protective_orders(pos, snap.adaptive)
         if not ok:
             await self._emergency_close(pos)
             return None
@@ -173,7 +178,6 @@ class LiveTrader:
 
         snap = self.cache.get_snapshot(symbol)
         pos.current_pnl = self._calc_pnl(pos, snap.price, reason)
-        self._last_sl_update.pop(symbol, None)
         logger.info(
             f"[LIVE] Closed {symbol} reason={reason} "
             f"pnl={pos.current_pnl:+.4f}",
@@ -188,30 +192,19 @@ class LiveTrader:
         # First: process positions closed by exchange events
         for symbol in list(self._exchange_closed):
             if symbol in self.positions:
-                p = await self.close_position(symbol, "exchange_event")
+                reason = self._exchange_closed.get(symbol, "exchange_event")
+                p = await self.close_position(symbol, reason)
                 if p:
-                    closed.append((p, self._exchange_closed.get(symbol, "exchange_event")))
+                    closed.append((p, reason))
 
         for symbol in list(self.positions):
             snap = self.cache.get_snapshot(symbol)
             if snap.stale or not snap.price:
                 continue
             pos = self.positions[symbol]
-            ap = snap.adaptive
             self._update_price_tracking(pos, snap.price)
-            self._check_breakeven(pos, snap.price, ap)
-            sl_changed = self._check_trailing(pos, snap.price, ap)
 
-            # Throttled SL update on exchange
-            if sl_changed:
-                now = time.time()
-                last = self._last_sl_update.get(symbol, 0)
-                if now - last >= SL_UPDATE_THROTTLE:
-                    self._last_sl_update[symbol] = now
-                    await self._update_exchange_sl(pos)
-
-            # Software exits (CVD divergence, time stop)
-            # Note: SL/TP hits are handled by exchange events, not here
+            # SL/TP/trailing are all on Binance — only check software exits
             reason = self._check_software_exits(pos, snap)
             if reason:
                 p = await self.close_position(symbol, reason)
@@ -284,19 +277,47 @@ class LiveTrader:
             original_risk=abs(entry - sl_price),
         )
 
-    async def _place_protective_orders(self, pos: Position) -> bool:
+    async def _place_protective_orders(
+        self, pos: Position, ap: AdaptiveParams,
+    ) -> bool:
         close_side = "SELL" if pos.direction == Direction.LONG else "BUY"
+
+        # 1. Hard-floor SL (STOP_MARKET)
         sl_resp = await self.executor.place_stop_loss(
             pos.symbol, close_side, pos.quantity, pos.sl_price,
         )
         if not sl_resp.get("orderId"):
             return False
         pos.sl_order_id = sl_resp["orderId"]
+
+        # 2. TP (TAKE_PROFIT_MARKET)
         tp_resp = await self.executor.place_take_profit(
             pos.symbol, close_side, pos.quantity, pos.tp_price,
         )
         if tp_resp.get("orderId"):
             pos.tp_order_id = tp_resp["orderId"]
+
+        # 3. Trailing stop (TRAILING_STOP_MARKET) — Binance handles natively
+        activation, callback = self._calc_trailing_params(pos, ap)
+        if callback > 0:
+            trail_resp = await self.executor.place_trailing_stop(
+                symbol=pos.symbol,
+                side=close_side,
+                quantity=pos.quantity,
+                callback_rate=callback,
+                activation_price=activation,
+            )
+            if trail_resp.get("orderId"):
+                pos.trail_order_id = trail_resp["orderId"]
+                logger.info(
+                    f"[LIVE] Trailing set {pos.symbol} "
+                    f"activation={activation:.6f} callback={callback}%",
+                )
+            else:
+                logger.warning(
+                    f"[LIVE] Trailing placement failed for {pos.symbol}, "
+                    f"continuing with SL+TP only",
+                )
         return True
 
     async def _emergency_close(self, pos: Position) -> None:
@@ -306,7 +327,7 @@ class LiveTrader:
         logger.error(f"[LIVE] Emergency close {pos.symbol} -- SL failed")
 
     async def _update_exchange_sl(self, pos: Position) -> None:
-        """Cancel old SL/TP and re-place with new SL level."""
+        """Cancel old orders and re-place. Used only for software close."""
         await self.executor.cancel_all(pos.symbol)
         close_side = "SELL" if pos.direction == Direction.LONG else "BUY"
         sl_resp = await self.executor.place_stop_loss(
@@ -321,14 +342,48 @@ class LiveTrader:
             )
             await self._emergency_close(pos)
             self.positions.pop(pos.symbol, None)
-            return
-        tp_resp = await self.executor.place_take_profit(
-            pos.symbol, close_side, pos.quantity, pos.tp_price,
-        )
-        if tp_resp.get("orderId"):
-            pos.tp_order_id = tp_resp["orderId"]
 
-    # -- price tracking & exit logic (mirrors PaperTrader) ------------------
+    # -- trailing params calculation ----------------------------------------
+
+    @staticmethod
+    def _calc_trailing_params(
+        pos: Position, ap: AdaptiveParams,
+    ) -> tuple[float, float]:
+        """Calculate (activation_price, callback_rate) for TRAILING_STOP_MARKET.
+
+        Returns callback_rate in [0.1, 5.0] percent range.
+        """
+        entry = pos.entry_price
+        if entry <= 0:
+            return 0.0, 0.0
+
+        atr_val = ap.atr_value
+        if atr_val > 0:
+            activation_dist = atr_val * ap.trail_activation_atr
+            trail_dist = max(
+                atr_val * ap.trail_distance_atr,
+                entry * MIN_TRAIL_PCT,
+            )
+        else:
+            risk = pos.original_risk or abs(entry - pos.sl_price)
+            activation_dist = risk * TRAILING_ACTIVATION_RR
+            trail_dist = max(
+                risk * TRAILING_RISK_FACTOR,
+                entry * MIN_TRAIL_PCT,
+            )
+
+        # callbackRate = trail distance as percentage of price
+        callback = round((trail_dist / entry) * 100, 1)
+        callback = max(MIN_CALLBACK_RATE, min(MAX_CALLBACK_RATE, callback))
+
+        if pos.direction == Direction.LONG:
+            activation = entry + activation_dist
+        else:
+            activation = entry - activation_dist
+
+        return activation, callback
+
+    # -- price tracking & exit logic ----------------------------------------
 
     @staticmethod
     def _update_price_tracking(pos: Position, price: float) -> None:
@@ -339,64 +394,6 @@ class LiveTrader:
                 min(pos.best_price, price) if pos.best_price else price
             )
         pos.current_pnl = LiveTrader._calc_pnl(pos, price)
-
-    @staticmethod
-    def _check_breakeven(
-        pos: Position, price: float, ap: AdaptiveParams,
-    ) -> None:
-        if pos.breakeven_moved:
-            return
-        atr_val = ap.atr_value
-        if atr_val > 0:
-            trigger = atr_val * ap.breakeven_trigger_atr
-        else:
-            risk = pos.original_risk or abs(pos.entry_price - pos.sl_price)
-            trigger = risk * BREAKEVEN_TRIGGER_RR
-        fee_buffer = pos.entry_price * (MAKER_FEE + TAKER_FEE)
-        if pos.direction == Direction.LONG:
-            if price >= pos.entry_price + trigger:
-                pos.sl_price = pos.entry_price + fee_buffer
-                pos.breakeven_moved = True
-        else:
-            if price <= pos.entry_price - trigger:
-                pos.sl_price = pos.entry_price - fee_buffer
-                pos.breakeven_moved = True
-
-    @staticmethod
-    def _check_trailing(
-        pos: Position, price: float, ap: AdaptiveParams,
-    ) -> bool:
-        """Returns True if SL was changed (needs exchange update)."""
-        atr_val = ap.atr_value
-        if atr_val > 0:
-            rr_trigger = atr_val * ap.trail_activation_atr
-            trail_distance = max(
-                atr_val * ap.trail_distance_atr,
-                pos.entry_price * MIN_TRAIL_PCT,
-            )
-        else:
-            risk = pos.original_risk or abs(pos.entry_price - pos.sl_price)
-            rr_trigger = risk * TRAILING_ACTIVATION_RR
-            trail_distance = max(
-                risk * TRAILING_RISK_FACTOR,
-                pos.entry_price * MIN_TRAIL_PCT,
-            )
-        old_sl = pos.sl_price
-        if pos.direction == Direction.LONG:
-            if price >= pos.entry_price + rr_trigger:
-                pos.trailing_activated = True
-            if pos.trailing_activated:
-                trail_sl = pos.best_price - trail_distance
-                if trail_sl > pos.sl_price:
-                    pos.sl_price = trail_sl
-        else:
-            if price <= pos.entry_price - rr_trigger:
-                pos.trailing_activated = True
-            if pos.trailing_activated:
-                trail_sl = pos.best_price + trail_distance
-                if trail_sl < pos.sl_price:
-                    pos.sl_price = trail_sl
-        return pos.sl_price != old_sl
 
     @staticmethod
     def _check_software_exits(

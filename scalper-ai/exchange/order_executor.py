@@ -203,6 +203,47 @@ class OrderExecutor:
             order_type="TAKE_PROFIT_MARKET",
         )
 
+    async def place_trailing_stop(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        callback_rate: float,
+        activation_price: float,
+    ) -> dict[str, Any]:
+        """Place TRAILING_STOP_MARKET with callbackRate and activationPrice.
+
+        callbackRate: 0.1–5.0 (percentage, step 0.1).
+        activationPrice: price at which trailing begins.
+        workingType=MARK_PRICE, reduceOnly=true.
+        """
+        quantity = self.round_quantity(symbol, quantity)
+        activation_price = self.round_price(symbol, activation_price)
+        if quantity <= 0 or callback_rate <= 0:
+            return {}
+        # Clamp callbackRate to Binance limits
+        callback_rate = max(0.1, min(5.0, round(callback_rate, 1)))
+        for attempt in range(1, MAX_RETRIES + 1):
+            resp = await self.client.place_order(
+                symbol=symbol,
+                side=side,
+                type="TRAILING_STOP_MARKET",
+                callbackRate=callback_rate,
+                activationPrice=activation_price,
+                quantity=quantity,
+                workingType="MARK_PRICE",
+                reduceOnly="true",
+            )
+            if resp.get("orderId"):
+                return resp
+            logger.warning(
+                f"Trailing stop failed for {symbol}: "
+                f"{resp.get('msg')} attempt {attempt}",
+            )
+            if attempt < MAX_RETRIES:
+                await asyncio.sleep(RETRY_DELAY * attempt)
+        return resp
+
     async def _place_protective(
         self,
         symbol: str,

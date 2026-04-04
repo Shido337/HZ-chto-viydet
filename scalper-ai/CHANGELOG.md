@@ -35,3 +35,7 @@ Files: core/live_trader.py, exchange/order_executor.py, core/bot_engine.py, serv
 ## [2026-04-04 17:51 UTC]
 Fix live order lifecycle: fill verification, user data stream, throttled SL, exchange event sync
 Files: core/live_trader.py, exchange/order_executor.py, exchange/binance_client.py, core/bot_engine.py
+
+## [2026-04-04 18:27 UTC]
+Exchange-native trailing stop: TRAILING_STOP_MARKET replaces software trailing/breakeven in LiveTrader
+Files: core/live_trader.py, exchange/order_executor.py, core/signal_generator.py

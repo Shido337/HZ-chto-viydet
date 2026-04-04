@@ -69,6 +69,7 @@ class Position:
     entry_order_id: int = 0
     sl_order_id: int = 0
     tp_order_id: int = 0
+    trail_order_id: int = 0
     # lifecycle tracking
     opened_at: float = field(default_factory=time.time)
     best_price: float = 0.0
