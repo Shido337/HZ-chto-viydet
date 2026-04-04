@@ -1,5 +1,13 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-05 00:10 UTC]
+Aggressive exit tuning — time_stop was #1 PnL killer (-$3.28 from 10 trades, avg -$0.33):
+1. MAX_HOLD_MINUTES: 8 → 5 — scalp trades that don't move in 5 min are dead
+2. MAX_HOLD_IF_PROFIT: 10 → 8 — still generous for winners
+3. STALE_EXIT_MINUTES: 6 → 4 — catch drifters before time_stop compounds loss
+4. STALE_EXIT_DRAWDOWN: 0.4% → 0.3% — tighter threshold for early losers
+Files: core/paper_trader.py
+
 ## [2026-04-04 23:25 UTC]
 Performance tuning based on 69-trade analysis (CB 25%WR draining profits):
 1. CB body requirement: 0.5× → 0.7× ATR — filters weak breaks (main loss source)
