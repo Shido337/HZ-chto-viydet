@@ -1,5 +1,9 @@
 # SCALPER-AI CHANGELOG
 
+## [2025-06-18 12:00 UTC]
+Fix empty chart on symbol switch: added REST endpoint GET /api/klines/{symbol} returning cached klines. CandleChart now fetches klines via REST fallback when store has no data (e.g. after symbol rotation or partial kline load failure). Added fitContent() after setData for proper auto-scroll.
+Files: server/api.py, dashboard/src/components/CandleChart.tsx
+
 ## [2026-04-04 15:40 UTC]
 Adaptive filter system: replace all hardcoded % thresholds with ATR-relative params. AdaptiveParams dataclass per-symbol, computed every 30s from regime + ATR percentile + learner feedback. Strategies use snap.adaptive for SL/TP/OB/volume/score. Paper trader trailing/BE now ATR-based. OnlineLearner score adjustment. Removed SL_WIDEN_HIGH_VOL hack. 10 trades: 4W/6L ~breakeven.
 Files: data/cache.py, core/bot_engine.py, core/paper_trader.py, ml/online_learner.py, strategies/continuation_break.py, strategies/mean_reversion.py, strategies/early_momentum.py

@@ -58,11 +58,28 @@ export const CandleChart: React.FC = () => {
   const prevSymRef = useRef('');
   const prevTfRef = useRef('');
   const dataLoadedRef = useRef(false);
+  const fetchingRef = useRef('');
   useEffect(() => {
     if (!seriesRef.current || !snap) return;
     const klines =
       tf === '1m' ? snap.klines_1m : tf === '3m' ? snap.klines_3m : snap.klines_5m;
-    if (!klines?.length) return;
+
+    // Fetch klines via REST if missing (e.g. after symbol rotation or partial load)
+    if (!klines?.length) {
+      const fetchKey = `${symbol}_${tf}`;
+      if (fetchingRef.current !== fetchKey) {
+        fetchingRef.current = fetchKey;
+        fetch(`/api/klines/${symbol}`)
+          .then((r) => r.json())
+          .then((data) => {
+            const store = useTradingStore.getState();
+            store.setSnapshot(data);
+          })
+          .catch(() => {})
+          .finally(() => { fetchingRef.current = ''; });
+      }
+      return;
+    }
 
     // Full setData on first load or symbol/tf change
     if (!dataLoadedRef.current || prevSymRef.current !== symbol || prevTfRef.current !== tf) {
@@ -77,6 +94,7 @@ export const CandleChart: React.FC = () => {
         close: k.c,
       }));
       seriesRef.current.setData(data);
+      chartRef.current?.timeScale().fitContent();
     } else {
       // Incremental update — only the last candle
       const last = klines[klines.length - 1];

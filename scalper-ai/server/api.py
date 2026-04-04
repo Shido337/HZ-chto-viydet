@@ -197,6 +197,13 @@ async def get_ml_stats() -> dict[str, Any]:
     return engine.learner.get_stats()
 
 
+@app.get("/api/klines/{symbol}")
+async def get_klines(symbol: str) -> dict[str, Any]:
+    """Return cached klines for a symbol (all timeframes)."""
+    snap = engine.cache.get_snapshot(symbol)
+    return _serialize_snapshot(snap, include_klines=True)
+
+
 @app.get("/api/signals")
 async def get_signals() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
