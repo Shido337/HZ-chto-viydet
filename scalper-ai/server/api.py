@@ -222,6 +222,8 @@ async def set_mode(mode: str) -> dict[str, str]:
     if engine.trader.open_count > 0:
         return {"error": "Close all positions before switching mode"}
     engine.switch_mode(mode)
+    if mode == "live":
+        await engine.recover_live_positions()
     logger.info(f"Mode switched to {mode}")
     return {"mode": mode}
 

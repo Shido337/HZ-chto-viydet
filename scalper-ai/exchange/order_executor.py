@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -18,15 +19,80 @@ RETRY_DELAY = 0.3
 
 
 class OrderExecutor:
-    """Place / cancel / modify orders with GTX post-only + FOK fallback."""
+    """Place / cancel / modify orders with GTX post-only + FOK fallback.
+
+    Caches exchange symbol filters (LOT_SIZE, PRICE_FILTER) so that
+    quantity and price are rounded to valid precision before sending.
+    """
 
     def __init__(self, client: BinanceClient) -> None:
         self.client = client
+        # symbol → {"tick_size": float, "step_size": float, "min_qty": float, "min_notional": float}
+        self._filters: dict[str, dict[str, float]] = {}
+
+    # -- symbol filter loading ----------------------------------------------
+
+    async def load_filters(self) -> None:
+        """Fetch exchange info and cache LOT_SIZE / PRICE_FILTER per symbol."""
+        try:
+            info = await self.client.get_exchange_info()
+            for s in info.get("symbols", []):
+                sym = s.get("symbol", "")
+                tick = 0.01
+                step = 0.001
+                min_qty = 0.001
+                min_notional = 5.0
+                for f in s.get("filters", []):
+                    ft = f.get("filterType")
+                    if ft == "PRICE_FILTER":
+                        tick = float(f.get("tickSize", tick))
+                    elif ft == "LOT_SIZE":
+                        step = float(f.get("stepSize", step))
+                        min_qty = float(f.get("minQty", min_qty))
+                    elif ft == "MIN_NOTIONAL":
+                        min_notional = float(f.get("notional", min_notional))
+                self._filters[sym] = {
+                    "tick_size": tick,
+                    "step_size": step,
+                    "min_qty": min_qty,
+                    "min_notional": min_notional,
+                }
+            logger.info(f"Loaded exchange filters for {len(self._filters)} symbols")
+        except Exception:
+            logger.exception("Failed to load exchange filters")
+
+    def round_price(self, symbol: str, price: float) -> float:
+        """Round price to tick_size precision."""
+        f = self._filters.get(symbol)
+        if not f:
+            return price
+        tick = f["tick_size"]
+        if tick <= 0:
+            return price
+        precision = max(0, -int(math.floor(math.log10(tick))))
+        return round(math.floor(price / tick) * tick, precision)
+
+    def round_quantity(self, symbol: str, qty: float) -> float:
+        """Round quantity to step_size precision, respecting min_qty."""
+        f = self._filters.get(symbol)
+        if not f:
+            return qty
+        step = f["step_size"]
+        min_qty = f["min_qty"]
+        if step <= 0:
+            return qty
+        precision = max(0, -int(math.floor(math.log10(step))))
+        rounded = round(math.floor(qty / step) * step, precision)
+        if rounded < min_qty:
+            return 0.0
+        return rounded
 
     # -- preparation --------------------------------------------------------
 
     async def prepare_symbol(self, symbol: str) -> None:
         """Set leverage + margin type before first trade on *symbol*."""
+        if not self._filters:
+            await self.load_filters()
         await self.client.set_leverage(symbol, LEVERAGE)
         try:
             await self.client.set_margin_type(symbol, "ISOLATED")

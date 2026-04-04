@@ -27,3 +27,7 @@ Files: core/signal_generator.py, core/paper_trader.py, core/bot_engine.py, serve
 ## [2026-04-04 10:22 UTC]
 SL/TP scalping optimization: cap SL at 0.5%, ATR floor 0.75x, min SL 0.25%, TP cap for EM, breakeven accounts for fees, WS disconnect handling
 Files: strategies/continuation_break.py, strategies/mean_reversion.py, strategies/early_momentum.py, core/paper_trader.py, server/api.py
+
+## [2026-04-04 17:42 UTC]
+Live trader ready: adaptive params, symbol precision, position recovery
+Files: core/live_trader.py, exchange/order_executor.py, core/bot_engine.py, server/api.py

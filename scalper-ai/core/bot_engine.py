@@ -92,6 +92,8 @@ class BotEngine:
     async def start(self) -> None:
         self._testnet = os.getenv("BINANCE_TESTNET", "false").lower() == "true"
         await self.client.start()
+        # Pre-load exchange filters (LOT_SIZE, PRICE_FILTER) for order precision
+        await self.executor.load_filters()
         balance = await self.client.get_balance()
         self.risk.session_start_balance = balance if balance > 0 else 10000.0
         logger.info(f"Starting balance: ${self.risk.session_start_balance:.2f}")
@@ -132,6 +134,13 @@ class BotEngine:
             self.trader = PaperTrader(self.cache)
         self.mode = mode
         logger.info(f"Trader switched to {mode}")
+
+    async def recover_live_positions(self) -> None:
+        """Recover open positions from exchange (call after switch to live)."""
+        if self.mode != "live" or not hasattr(self.trader, "recover_positions"):
+            return
+        await self.trader.recover_positions()
+        logger.info(f"Recovered {self.trader.open_count} live positions")
 
     # -- main loop ----------------------------------------------------------
 
