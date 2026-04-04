@@ -9,6 +9,7 @@ export const CandleChart: React.FC = () => {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const priceLinesRef = useRef<any[]>([]);
+  const lastDataKeyRef = useRef('');
   const [tf, setTf] = useState<TF>('1m');
 
   const symbol = useTradingStore((s) => s.selectedSymbol);
@@ -16,6 +17,7 @@ export const CandleChart: React.FC = () => {
   const positions = useTradingStore((s) => s.positions);
   const pendingOrders = useTradingStore((s) => s.pendingOrders);
 
+  // -- Chart creation (once) -----------------------------------------------
   useEffect(() => {
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
@@ -38,11 +40,7 @@ export const CandleChart: React.FC = () => {
     });
     chartRef.current = chart;
     seriesRef.current = series;
-    // Reset tracking refs so new chart/series gets full data load
-    // (fixes StrictMode double-mount leaving stale refs)
-    prevSymRef.current = '';
-    prevTfRef.current = '';
-    fetchingRef.current = '';
+    lastDataKeyRef.current = '';
 
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -56,43 +54,43 @@ export const CandleChart: React.FC = () => {
     return () => {
       ro.disconnect();
       chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
     };
   }, []);
 
-  // Full data load on symbol or timeframe change
-  const prevSymRef = useRef('');
-  const prevTfRef = useRef('');
-  const fetchingRef = useRef('');
-
-  // Force-fetch klines on symbol change to guarantee data
+  // -- Fetch klines on symbol change ---------------------------------------
   useEffect(() => {
     if (!symbol) return;
-    const fetchKey = `${symbol}`;
-    if (fetchingRef.current === fetchKey) return;
-    fetchingRef.current = fetchKey;
+    let cancelled = false;
     fetch(`/api/klines/${symbol}`)
       .then((r) => {
         if (!r.ok) throw new Error(`klines fetch ${r.status}`);
         return r.json();
       })
       .then((data) => {
-        useTradingStore.getState().setSnapshot(data);
+        if (!cancelled) useTradingStore.getState().setSnapshot(data);
       })
-      .catch((err) => console.error('[CandleChart] klines fetch failed:', err))
-      .finally(() => { fetchingRef.current = ''; });
+      .catch((err) => console.error('[CandleChart] klines fetch failed:', err));
+    return () => { cancelled = true; };
   }, [symbol]);
 
+  // -- Render candles ------------------------------------------------------
   useEffect(() => {
-    if (!seriesRef.current || !snap) return;
+    const series = seriesRef.current;
+    if (!series || !snap) return;
     const klines =
       tf === '1m' ? snap.klines_1m : tf === '3m' ? snap.klines_3m : snap.klines_5m;
-
     if (!klines?.length) return;
 
-    // Full setData on symbol/tf change
-    if (prevSymRef.current !== symbol || prevTfRef.current !== tf) {
-      prevSymRef.current = symbol;
-      prevTfRef.current = tf;
+    // Build a key from symbol + tf + first timestamp + last timestamp + count
+    // If key changed → full setData. Same key → incremental update.
+    const first = klines[0];
+    const last = klines[klines.length - 1];
+    const dataKey = `${symbol}:${tf}:${first.t}:${klines.length}`;
+
+    if (lastDataKeyRef.current !== dataKey) {
+      lastDataKeyRef.current = dataKey;
       const data: CandlestickData[] = klines.map((k) => ({
         time: (k.t / 1000) as Time,
         open: k.o,
@@ -100,13 +98,12 @@ export const CandleChart: React.FC = () => {
         low: k.l,
         close: k.c,
       }));
-      seriesRef.current.setData(data);
+      series.setData(data);
       chartRef.current?.timeScale().fitContent();
     } else {
       // Incremental update — only the last candle
-      const last = klines[klines.length - 1];
       if (last) {
-        seriesRef.current.update({
+        series.update({
           time: (last.t / 1000) as Time,
           open: last.o,
           high: last.h,

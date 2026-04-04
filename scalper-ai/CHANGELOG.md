@@ -125,3 +125,7 @@ Files: dashboard/src/components/CandleChart.tsx
 ## [2026-04-04 23:25 UTC]
 Redesign CB: break-and-retest (pullback entry at broken level) instead of chasing impulse. Re-enable CB strategy.
 Files: strategies/continuation_break.py, core/bot_engine.py, tests/test_strategies.py
+
+## [2026-04-04 23:39 UTC]
+Fix chart: replace fragile prev-sym refs with data-key tracking (symbol+tf+firstTs+count). Proper cleanup on unmount. Cancel stale fetches.
+Files: dashboard/src/components/CandleChart.tsx
