@@ -16,7 +16,9 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 BODY_MIN_PCT = 0.0003          # 0.03% minimum body (filter noise)
 MOMENTUM_BARS = 2              # last 2 1m closes in direction
 ENTRY_BUFFER_PCT = 0.0001      # 0.01% buffer
-SWING_LOOKBACK = 5             # 5 candles (~15 min at 3m)
+SWING_LOOKBACK = 8             # 8 candles (~24 min at 3m)
+MIN_RISK_PCT = 0.001           # 0.1% absolute minimum risk
+MAX_RISK_PCT = 0.015           # 1.5% absolute maximum risk (scalping)
 # Adaptive constants come from snap.adaptive:
 #   ob_min, volume_spike_min, min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
@@ -130,19 +132,30 @@ class ContinuationBreak(BaseStrategy):
         buffer = snap.price * ENTRY_BUFFER_PCT
         max_sl_dist = atr_val * ap.max_sl_atr
         min_sl_dist = atr_val * ap.min_sl_atr
+
+        # Use pre-breakout candle for structural SL (not breakout candle)
+        prev = candles_3m[-2]
         if d == Direction.LONG:
             entry = last["c"] + buffer
-            raw_risk = entry - last["l"]
+            raw_risk = entry - min(last["l"], prev["l"])
         else:
             entry = last["c"] - buffer
-            raw_risk = last["h"] - entry
+            raw_risk = max(last["h"], prev["h"]) - entry
+
+        # Hard min/max risk bounds for scalping
+        min_risk_abs = entry * MIN_RISK_PCT
+        max_risk_abs = entry * MAX_RISK_PCT
+        if raw_risk < min_risk_abs * 0.5:
+            return None  # structure too tight — not tradeable
 
         # Reject if natural risk exceeds ATR cap
         if raw_risk > max_sl_dist:
             return None
 
-        risk = max(raw_risk, min_sl_dist)
-        if risk <= 0 or (raw_risk > 0 and risk > raw_risk * 3):
+        risk = max(raw_risk, min_sl_dist, min_risk_abs)
+        if risk > max_risk_abs:
+            return None  # too wide for scalping
+        if raw_risk > 0 and risk > raw_risk * 3:
             return None  # floor inflated SL beyond structural level
         if d == Direction.LONG:
             sl = entry - risk
