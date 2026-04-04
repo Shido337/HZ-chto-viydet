@@ -1,5 +1,12 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-05 00:48 UTC]
+Rollback aggressive exits — 5min MAX_HOLD made time_stop worse (4/8=50% of trades). Compromise:
+1. MAX_HOLD_MINUTES: 5 → 6 — give trades more room
+2. MAX_HOLD_IF_PROFIT: 8 → 10 — winners need time
+3. STALE_EXIT_MINUTES: 4 → 5 — less aggressive stale cutting
+Files: core/paper_trader.py
+
 ## [2026-04-05 00:10 UTC]
 Aggressive exit tuning — time_stop was #1 PnL killer (-$3.28 from 10 trades, avg -$0.33):
 1. MAX_HOLD_MINUTES: 8 → 5 — scalp trades that don't move in 5 min are dead

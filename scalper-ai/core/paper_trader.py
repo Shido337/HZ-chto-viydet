@@ -18,9 +18,9 @@ TRAILING_ACTIVATION_RR = 0.5  # fallback: activate trailing at 0.5× risk
 TRAILING_RISK_FACTOR = 0.4    # fallback: trail distance = 40% of original risk
 MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
 BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
-MAX_HOLD_MINUTES = 5          # SCALPING: 5 min hard cap for losers
-MAX_HOLD_IF_PROFIT = 8        # extend to 8 min if position is in profit
-STALE_EXIT_MINUTES = 4        # catch drifting losers early
+MAX_HOLD_MINUTES = 6          # SCALPING: 6 min hard cap for losers
+MAX_HOLD_IF_PROFIT = 10       # extend to 10 min if position is in profit
+STALE_EXIT_MINUTES = 5        # avoid cutting trades too early
 STALE_EXIT_DRAWDOWN = 0.003   # 0.3% unrealized loss threshold for stale exit
 LEVERAGE = 25
 CVD_EXIT_MIN_PNL_PCT = 0.003  # 0.3% min profit for CVD exit
