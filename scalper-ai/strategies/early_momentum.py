@@ -16,11 +16,12 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 ADX_LOW = 18.0
 ADX_HIGH = 30.0
 ATR_COMPRESSION_PCT = 55.0   # bottom 55th percentile
-CVD_CONSECUTIVE_BARS = 1     # 1+ bars building
-OB_CONSISTENT_MIN = 0.52     # 52%+ one side
-PRICE_NEAR_LEVEL_PCT = 0.015 # 1.50% of level
+CVD_CONSECUTIVE_BARS = 3     # 3+ bars building (was 1 — too noisy)
+OB_CONSISTENT_MIN = 0.58     # 58%+ one side (was 0.52 — too loose)
+PRICE_NEAR_LEVEL_PCT = 0.010 # 1.0% of level (tighter for scalping)
 TP_FIBO = 2.618            # golden extension for bigger targets
 MIN_RR = 1.5              # minimum 1.5:1 reward/risk
+TREND_EMA_BARS = 20        # 5m EMA for trend alignment
 
 
 class EarlyMomentum(BaseStrategy):
@@ -39,6 +40,8 @@ class EarlyMomentum(BaseStrategy):
             return None
         direction = self._check_cvd_buildup(snap)
         if direction is None:
+            return None
+        if not self._check_trend_alignment(snap, direction):
             return None
         if not self._check_ob_and_level(snap, direction):
             return None
@@ -70,6 +73,29 @@ class EarlyMomentum(BaseStrategy):
         if all_down and snap.cvd_delta_1m < 0:
             return Direction.SHORT
         return None
+
+    def _check_trend_alignment(
+        self, snap: MarketSnapshot, d: Direction,
+    ) -> bool:
+        """5m EMA slope must agree with signal direction."""
+        candles_5m = list(snap.klines_5m)
+        if len(candles_5m) < TREND_EMA_BARS + 1:
+            return False
+        closes = [c["c"] for c in candles_5m[-(TREND_EMA_BARS + 1):]]
+        # Simple EMA approximation: compare last vs prior EMA
+        mult = 2.0 / (TREND_EMA_BARS + 1)
+        ema = closes[0]
+        for c in closes[1:]:
+            ema = c * mult + ema * (1 - mult)
+        ema_prev = closes[0]
+        for c in closes[1:-1]:
+            ema_prev = c * mult + ema_prev * (1 - mult)
+        slope = ema - ema_prev
+        if d == Direction.LONG and slope <= 0:
+            return False
+        if d == Direction.SHORT and slope >= 0:
+            return False
+        return True
 
     def _check_ob_and_level(
         self, snap: MarketSnapshot, d: Direction,
