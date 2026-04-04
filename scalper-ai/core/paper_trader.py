@@ -20,8 +20,8 @@ MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
 BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
 MAX_HOLD_MINUTES = 8          # SCALPING: 8 min max
 MAX_HOLD_IF_PROFIT = 10       # extend to 10 min if position is in profit (was 12)
-STALE_EXIT_MINUTES = 4        # close if still losing after 4 min without improvement
-STALE_EXIT_DRAWDOWN = 0.002   # 0.2% unrealized loss threshold for stale exit
+STALE_EXIT_MINUTES = 6        # avoid cutting trades too early in noisy consolidations
+STALE_EXIT_DRAWDOWN = 0.004   # 0.4% unrealized loss threshold for stale exit
 LEVERAGE = 25
 CVD_EXIT_MIN_PNL_PCT = 0.003  # 0.3% min profit for CVD exit
 CVD_EXIT_MIN_ATR_MULT = 0.5   # OR 0.5× ATR profit for CVD exit
@@ -29,7 +29,7 @@ CVD_EXIT_MIN_HOLD_SEC = 120   # hold at least 2 min before CVD exit
 # Binance futures fees: maker 0.02%, taker 0.04%
 MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
-PENDING_TIMEOUT = 30  # seconds — cancel unfilled limit after this
+PENDING_TIMEOUT = 60  # seconds — give pullback entries more time to fill
 
 
 class PaperTrader:
@@ -263,7 +263,7 @@ class PaperTrader:
             return ("tp_hit", pos.tp_price)
         if not is_long and price <= pos.tp_price:
             return ("tp_hit", pos.tp_price)
-        # Stale exit: losing >0.2% after 4 min with no improvement
+        # Stale exit: losing >0.4% after 6 min with no improvement
         if not in_profit and elapsed_min >= STALE_EXIT_MINUTES:
             loss_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
             if loss_pct >= STALE_EXIT_DRAWDOWN:

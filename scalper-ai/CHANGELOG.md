@@ -30,6 +30,13 @@ Adaptive filter system: replace all hardcoded % thresholds with ATR-relative par
 Files: data/cache.py, core/bot_engine.py, core/paper_trader.py, ml/online_learner.py, strategies/continuation_break.py, strategies/mean_reversion.py, strategies/early_momentum.py
 
 ## [2026-04-04 16:15 UTC]
+
+## [2026-04-04 20:24 UTC]
+Execution tuning to improve trade throughput and reduce premature technical exits:
+1. Increased pending limit timeout to 60s (was 30s) so pullback entries have more time to fill
+2. Relaxed stale exit trigger to 6 min and 0.4% drawdown (was 4 min and 0.2%)
+Files: core/paper_trader.py
+
 Performance fix: CVD exit was killing winners (+$0.03 avg after 30s). Now requires 2min hold + 0.3% profit + 0.5×ATR profit. CB requires impulsive break (body≥0.5×ATR). Time stop 5→8min, extends to 12 if profitable. Trailing tighter in trends (0.2 ATR). Wider SL for trending (2.0×ATR). TP raised to 2.0 RR in trends.
 Files: core/paper_trader.py, core/bot_engine.py, strategies/continuation_break.py
 
