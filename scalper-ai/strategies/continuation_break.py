@@ -119,19 +119,22 @@ class ContinuationBreak(BaseStrategy):
             return None
 
         buffer = snap.price * ENTRY_BUFFER_PCT
-        # Minimum SL: max of (1.5× ATR, 0.5% of price)
-        atr_floor = snap.indicators.atr * 1.5 if snap.indicators.atr else 0
-        pct_floor = snap.price * 0.005  # absolute 0.5% minimum
-        min_sl_dist = max(atr_floor, pct_floor)
+        # Minimum SL: max of (0.75× ATR, 0.25% of price), capped at 0.5%
+        atr_floor = snap.indicators.atr * 0.75 if snap.indicators.atr else 0
+        pct_floor = snap.price * 0.0025  # absolute 0.25% minimum
+        max_sl_dist = snap.price * 0.005  # cap at 0.5%
+        min_sl_dist = min(max(atr_floor, pct_floor), max_sl_dist)
         if d == Direction.LONG:
             entry = last["c"] + buffer
             raw_risk = entry - last["l"]
             risk = max(raw_risk, min_sl_dist) if min_sl_dist else raw_risk
+            risk = min(risk, max_sl_dist)  # cap SL at 0.5%
             sl = entry - risk
         else:
             entry = last["c"] - buffer
             raw_risk = last["h"] - entry
             risk = max(raw_risk, min_sl_dist) if min_sl_dist else raw_risk
+            risk = min(risk, max_sl_dist)  # cap SL at 0.5%
             sl = entry + risk
 
         if risk <= 0:
