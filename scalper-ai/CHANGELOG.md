@@ -1,5 +1,14 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-05 01:30 UTC]
+EM market entry — limit orders incompatible with momentum setups:
+1. EM now enters at market (ask for LONG, bid for SHORT) — instant fill
+2. Other strategies (MR) keep limit entry for pullback fills
+3. Fee accounting: EM entry = taker fee (0.04%), others = maker (0.02%)
+4. Dashboard notified of immediate fill via _on_position_opened
+Problem: EM signals were expiring because price moved away from limit
+Files: core/paper_trader.py, core/bot_engine.py
+
 ## [2026-04-05 01:10 UTC]
 Critical: Disable CB strategy + fix ML adaptive system:
 1. CB DISABLED — 47 trades WR=23% PnL=-$5.67, toxic at ALL score levels (even 0.80+ = 17%WR)

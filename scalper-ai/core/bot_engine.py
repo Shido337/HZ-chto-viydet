@@ -411,8 +411,14 @@ class BotEngine:
             return
         # PaperTrader returns PendingOrder, LiveTrader returns Position
         if isinstance(result, PendingOrder):
-            if self._on_pending_placed:
-                await self._on_pending_placed(result)
+            # Market fills (EM) go straight to positions — notify as opened
+            if signal.symbol in self.trader.positions:
+                pos = self.trader.positions[signal.symbol]
+                if self._on_position_opened:
+                    await self._on_position_opened(pos)
+            else:
+                if self._on_pending_placed:
+                    await self._on_pending_placed(result)
         else:
             if self._on_position_opened:
                 await self._on_position_opened(result)

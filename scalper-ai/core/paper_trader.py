@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from core.signal_generator import Direction, PendingOrder, Position, Signal
+from core.signal_generator import Direction, PendingOrder, Position, SetupType, Signal
 from data.cache import AdaptiveParams, MarketCache
 
 if TYPE_CHECKING:
@@ -47,7 +47,11 @@ class PaperTrader:
     # -- open ---------------------------------------------------------------
 
     def open_position(self, signal: Signal, size_usdt: float) -> PendingOrder | None:
-        """Place a limit order at best bid/ask. Returns PendingOrder."""
+        """Place a limit order at best bid/ask. Returns PendingOrder.
+
+        EARLY_MOMENTUM uses market entry (ask for LONG, bid for SHORT)
+        because momentum moves away from limit orders.
+        """
         # Sanity: TP must be on the correct side of entry
         if signal.direction == Direction.LONG and signal.tp_price <= signal.entry_price:
             logger.warning(f"[PAPER] Rejected {signal.symbol}: TP {signal.tp_price} <= entry {signal.entry_price}")
@@ -56,12 +60,21 @@ class PaperTrader:
             logger.warning(f"[PAPER] Rejected {signal.symbol}: TP {signal.tp_price} >= entry {signal.entry_price}")
             return None
 
-        # Limit order: use best available but never worse than signal target
         snap = self.cache.get_snapshot(signal.symbol)
-        if signal.direction == Direction.LONG:
-            entry = min(snap.bid, signal.entry_price) if snap.bid > 0 else signal.entry_price
+        is_market = signal.setup_type == SetupType.EARLY_MOMENTUM
+
+        if is_market:
+            # Market entry: LONG at ask, SHORT at bid (taker)
+            if signal.direction == Direction.LONG:
+                entry = snap.ask if snap.ask > 0 else signal.entry_price
+            else:
+                entry = snap.bid if snap.bid > 0 else signal.entry_price
         else:
-            entry = max(snap.ask, signal.entry_price) if snap.ask > 0 else signal.entry_price
+            # Limit entry: LONG at bid, SHORT at ask (maker)
+            if signal.direction == Direction.LONG:
+                entry = min(snap.bid, signal.entry_price) if snap.bid > 0 else signal.entry_price
+            else:
+                entry = max(snap.ask, signal.entry_price) if snap.ask > 0 else signal.entry_price
 
         # Shift SL/TP by the same delta so risk/reward stays proportional
         shift = entry - signal.entry_price
@@ -70,6 +83,39 @@ class PaperTrader:
 
         notional = size_usdt
         margin = notional / LEVERAGE
+        sl_pct = abs(entry - sl) / entry if entry else 0
+
+        if is_market:
+            # Immediate fill — create Position directly
+            pos = Position(
+                signal=signal,
+                symbol=signal.symbol,
+                direction=signal.direction,
+                setup_type=signal.setup_type,
+                score=signal.score,
+                entry_price=entry,
+                sl_price=sl,
+                tp_price=tp,
+                size_usdt=notional,
+                quantity=notional / entry if entry else 0,
+                best_price=entry,
+                original_risk=abs(entry - sl),
+            )
+            self.positions[signal.symbol] = pos
+            logger.info(
+                f"[PAPER] Market FILLED {signal.direction.value} {signal.symbol} "
+                f"@ {entry:.6f} (signal: {signal.entry_price:.6f}, shift={shift:+.6f}) "
+                f"SL={sl:.6f} TP={tp:.6f} "
+                f"notional=${notional:.2f} sl_dist={sl_pct*100:.3f}%",
+            )
+            # Return as PendingOrder for API compat (caller expects PendingOrder|None)
+            return PendingOrder(
+                signal=signal, symbol=signal.symbol, direction=signal.direction,
+                setup_type=signal.setup_type, score=signal.score,
+                entry_price=entry, sl_price=sl, tp_price=tp,
+                size_usdt=notional, quantity=notional / entry if entry else 0,
+                expiry=0,
+            )
 
         order = PendingOrder(
             signal=signal,
@@ -85,7 +131,6 @@ class PaperTrader:
             expiry=time.time() + PENDING_TIMEOUT,
         )
         self.pending[signal.symbol] = order
-        sl_pct = abs(entry - sl) / entry if entry else 0
         logger.info(
             f"[PAPER] Limit placed {signal.direction.value} {signal.symbol} "
             f"@ {entry:.6f} (signal: {signal.entry_price:.6f}, shift={shift:+.6f}) "
@@ -295,8 +340,9 @@ class PaperTrader:
             pnl = (price - pos.entry_price) / pos.entry_price * pos.size_usdt
         else:
             pnl = (pos.entry_price - price) / pos.entry_price * pos.size_usdt
-        # Entry: always limit (maker)
-        entry_fee = pos.size_usdt * MAKER_FEE
+        # Entry: limit = maker, market (EM) = taker
+        is_market_entry = pos.setup_type == SetupType.EARLY_MOMENTUM
+        entry_fee = pos.size_usdt * (TAKER_FEE if is_market_entry else MAKER_FEE)
         # Exit: TP = limit (maker), rest = market (taker)
         if reason == "tp_hit":
             exit_fee = pos.size_usdt * MAKER_FEE
