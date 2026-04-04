@@ -38,6 +38,11 @@ export const CandleChart: React.FC = () => {
     });
     chartRef.current = chart;
     seriesRef.current = series;
+    // Reset tracking refs so new chart/series gets full data load
+    // (fixes StrictMode double-mount leaving stale refs)
+    prevSymRef.current = '';
+    prevTfRef.current = '';
+    fetchingRef.current = '';
 
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -66,11 +71,14 @@ export const CandleChart: React.FC = () => {
     if (fetchingRef.current === fetchKey) return;
     fetchingRef.current = fetchKey;
     fetch(`/api/klines/${symbol}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`klines fetch ${r.status}`);
+        return r.json();
+      })
       .then((data) => {
         useTradingStore.getState().setSnapshot(data);
       })
-      .catch(() => {})
+      .catch((err) => console.error('[CandleChart] klines fetch failed:', err))
       .finally(() => { fetchingRef.current = ''; });
   }, [symbol]);
 

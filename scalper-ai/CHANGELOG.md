@@ -117,3 +117,7 @@ Files: strategies/continuation_break.py
 ## [2026-04-04 19:15 UTC]
 Switch workingType from MARK_PRICE to CONTRACT_PRICE (Last Price) for SL/TP/trailing
 Files: exchange/order_executor.py
+
+## [2026-04-04 23:09 UTC]
+Fix empty chart: reset tracking refs on chart creation (StrictMode fix)
+Files: dashboard/src/components/CandleChart.tsx
