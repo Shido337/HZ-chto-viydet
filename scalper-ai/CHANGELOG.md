@@ -1,5 +1,15 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-05 01:10 UTC]
+Critical: Disable CB strategy + fix ML adaptive system:
+1. CB DISABLED — 47 trades WR=23% PnL=-$5.67, toxic at ALL score levels (even 0.80+ = 17%WR)
+2. ML learner: per-setup global tracking (was per-symbol only, never reached 10-sample threshold)
+3. ML learner: fallback from per-(setup,symbol) to per-setup global for score adjustments
+4. Adaptive: use max (most conservative) adjustment across enabled strategies
+5. Stats/drift exclude global rollup keys to avoid double-counting
+EM+MR alone: 40 trades, WR=45%, PnL=+$3.02
+Files: core/bot_engine.py, ml/online_learner.py
+
 ## [2026-04-05 00:48 UTC]
 Rollback aggressive exits — 5min MAX_HOLD made time_stop worse (4/8=50% of trades). Compromise:
 1. MAX_HOLD_MINUTES: 5 → 6 — give trades more room

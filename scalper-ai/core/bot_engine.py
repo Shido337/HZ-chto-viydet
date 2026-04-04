@@ -50,7 +50,7 @@ class BotEngine:
             EarlyMomentum(),
         ]
         self.strategy_enabled = {
-            "CONTINUATION_BREAK": True,
+            "CONTINUATION_BREAK": False,  # disabled: WR=23%, PnL=-$5.67 over 47 trades
             "MEAN_REVERSION": True,
             "EARLY_MOMENTUM": True,
         }
@@ -558,14 +558,16 @@ class BotEngine:
 
         # --- Learner feedback into min_score ---
         base_score = 0.65
-        # Check all setup types and take the most relevant adjustment
+        # Check enabled setup types and use the most conservative (tightest) adjustment
         adjustments: list[float] = []
-        for setup_name in ("CONTINUATION_BREAK", "MEAN_REVERSION", "EARLY_MOMENTUM"):
+        for setup_name, enabled in self.strategy_enabled.items():
+            if not enabled:
+                continue
             adj = self.learner.get_score_adjustment(setup_name, symbol)
             if adj != 0.0:
                 adjustments.append(adj)
-        # Use average adjustment if any, otherwise 0
-        score_delta = sum(adjustments) / len(adjustments) if adjustments else 0.0
+        # Use max (most conservative) — if any strategy is losing, tighten for all
+        score_delta = max(adjustments) if adjustments else 0.0
         min_score = max(0.50, min(0.80, base_score + score_delta))
 
         params = AdaptiveParams(
@@ -632,8 +634,10 @@ class BotEngine:
         added = new_symbols - old_symbols
         removed = old_symbols - new_symbols
 
-        # Don't remove symbols with open positions
+        # Don't remove symbols with open positions or pending orders
         open_syms = set(self.trader.positions.keys())
+        if hasattr(self.trader, "pending"):
+            open_syms |= set(self.trader.pending.keys())
         kept_from_removed = removed & open_syms
         if kept_from_removed:
             logger.info(f"Keeping {kept_from_removed} (open positions)")
