@@ -18,7 +18,7 @@ OB_IMBALANCE_MIN = 0.55       # 55% bid or ask
 VOLUME_SPIKE_MIN = 0.5        # 0.5× avg (any meaningful volume)
 MOMENTUM_BARS = 2             # last 2 1m closes in direction
 ENTRY_BUFFER_PCT = 0.0001     # 0.01% buffer
-TP_RR = 3.0                   # 1:3 risk-reward (let winners run)
+TP_RR = 1.5                   # 1:1.5 — realistic for 5min scalp window
 SWING_LOOKBACK = 5            # 5 candles (~15 min at 3m)
 CB_MIN_SCORE = 0.75           # higher threshold for CB (base is 0.65)
 

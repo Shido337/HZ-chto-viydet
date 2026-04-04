@@ -14,13 +14,13 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-TRAILING_ACTIVATION_RR = 0.8  # activate trailing early — scalp, lock fast
-TRAILING_PCT = 0.003          # 0.3% trailing — tight for quick capture
-BREAKEVEN_TRIGGER_RR = 0.4    # move SL to entry at 0.4× risk (protect fast)
-MAX_HOLD_MINUTES = 10         # SCALPING: 10 min max, catch the moment
+TRAILING_ACTIVATION_RR = 0.3  # activate trailing at 0.3× risk — catch any move
+TRAILING_PCT = 0.0015         # 0.15% trailing — ultra tight for scalp
+BREAKEVEN_TRIGGER_RR = 0.2    # move SL to entry at 0.2× risk (protect ASAP)
+MAX_HOLD_MINUTES = 5          # SCALPING: 5 min max, no lingering
 SL_WIDEN_HIGH_VOL = 0.30      # 30% wider SL in HIGH_VOL
 LEVERAGE = 25
-CVD_EXIT_MIN_PNL_PCT = 0.003  # 0.3% profit enough for CVD exit in scalping
+CVD_EXIT_MIN_PNL_PCT = 0.001  # 0.1% profit enough for CVD exit
 # Binance futures fees: maker 0.02%, taker 0.04%
 MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)

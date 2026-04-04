@@ -18,8 +18,8 @@ SWEEP_MAX_PCT = 0.0080    # 0.80% beyond swing
 OB_FLIP_MIN = 0.52        # 52% opposite after flip
 VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP
 SL_BUFFER_PCT = 0.0005    # 0.05% beyond sweep extreme
-MIN_RR = 1.5              # minimum 1.5:1 reward/risk
-MR_TP_RR = 2.0            # 1:2 risk-reward (instead of plain VWAP)
+MIN_RR = 1.0              # minimum 1:1 reward/risk (scalping)
+MR_TP_RR = 1.2            # 1:1.2 — fast reversion take-profit
 
 
 class MeanReversion(BaseStrategy):

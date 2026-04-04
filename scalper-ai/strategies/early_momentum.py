@@ -19,8 +19,8 @@ ATR_COMPRESSION_PCT = 55.0   # bottom 55th percentile
 CVD_CONSECUTIVE_BARS = 3     # 3+ bars building (was 1 — too noisy)
 OB_CONSISTENT_MIN = 0.58     # 58%+ one side (was 0.52 — too loose)
 PRICE_NEAR_LEVEL_PCT = 0.010 # 1.0% of level (tighter for scalping)
-TP_FIBO = 2.618            # golden extension for bigger targets
-MIN_RR = 1.5              # minimum 1.5:1 reward/risk
+TP_FIBO = 1.618            # 1.618 fibo — realistic for scalp
+MIN_RR = 1.0              # minimum 1:1 reward/risk (scalping)
 TREND_EMA_BARS = 20        # 5m EMA for trend alignment
 
 
