@@ -1,5 +1,9 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-04 15:40 UTC]
+Adaptive filter system: replace all hardcoded % thresholds with ATR-relative params. AdaptiveParams dataclass per-symbol, computed every 30s from regime + ATR percentile + learner feedback. Strategies use snap.adaptive for SL/TP/OB/volume/score. Paper trader trailing/BE now ATR-based. OnlineLearner score adjustment. Removed SL_WIDEN_HIGH_VOL hack. 10 trades: 4W/6L ~breakeven.
+Files: data/cache.py, core/bot_engine.py, core/paper_trader.py, ml/online_learner.py, strategies/continuation_break.py, strategies/mean_reversion.py, strategies/early_momentum.py
+
 ## [2026-04-04 01:00 UTC]
 Tighten EarlyMomentum: CVD bars 1->3, OB 52->58%, trend EMA filter, proximity 1.5->1.0%
 Files: strategies/early_momentum.py

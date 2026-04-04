@@ -1,11 +1,16 @@
 """Entry point — keeps uvicorn alive with proper signal handling."""
 import atexit
+import faulthandler
 import signal
 import sys
 import traceback
 
 import uvicorn
 from loguru import logger
+
+# Enable faulthandler to catch segfaults and write to a file
+_fault_file = open("crash_fault.log", "w")
+faulthandler.enable(file=_fault_file, all_threads=True)
 
 
 def _on_exit():
@@ -38,7 +43,10 @@ if __name__ == "__main__":
         logger.warning("uvicorn.run() returned normally")
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received")
-    except Exception as exc:
-        logger.critical(f"Server crashed: {exc}")
+    except SystemExit as exc:
+        logger.critical(f"SystemExit: code={exc.code}")
+        traceback.print_exc()
+    except BaseException as exc:
+        logger.critical(f"Server crashed ({type(exc).__name__}): {exc}")
         traceback.print_exc()
         sys.exit(1)

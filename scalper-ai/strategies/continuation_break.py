@@ -11,16 +11,15 @@ from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy, MIN_SCORE
 
 # ---------------------------------------------------------------------------
-# Thresholds (prompt: CONTINUATION_BREAK)
+# Fixed structural constants (NOT volatility-dependent)
 # ---------------------------------------------------------------------------
-BODY_MIN_PCT = 0.0002          # 0.02% minimum body
-OB_IMBALANCE_MIN = 0.55       # 55% bid or ask
-VOLUME_SPIKE_MIN = 0.5        # 0.5× avg (any meaningful volume)
-MOMENTUM_BARS = 2             # last 2 1m closes in direction
-ENTRY_BUFFER_PCT = 0.0001     # 0.01% buffer
-TP_RR = 1.5                   # 1:1.5 — realistic for 5min scalp window
-SWING_LOOKBACK = 5            # 5 candles (~15 min at 3m)
-CB_MIN_SCORE = 0.75           # higher threshold for CB (base is 0.65)
+BODY_MIN_PCT = 0.0003          # 0.03% minimum body (filter noise)
+MOMENTUM_BARS = 2              # last 2 1m closes in direction
+ENTRY_BUFFER_PCT = 0.0001      # 0.01% buffer
+SWING_LOOKBACK = 5             # 5 candles (~15 min at 3m)
+# Adaptive constants come from snap.adaptive:
+#   ob_min, volume_spike_min, min_score, tp_rr,
+#   max_sl_atr, min_sl_atr, atr_value
 
 
 class ContinuationBreak(BaseStrategy):
@@ -49,7 +48,7 @@ class ContinuationBreak(BaseStrategy):
     # -- sub-checks ---------------------------------------------------------
 
     def _detect_break(self, snap: MarketSnapshot) -> Direction | None:
-        """3m structure break with body ≥ 0.15%."""
+        """3m structure break with body ≥ BODY_MIN_PCT."""
         candles = list(snap.klines_3m)
         if len(candles) < 12:
             return None
@@ -67,19 +66,20 @@ class ContinuationBreak(BaseStrategy):
         return None
 
     def _check_flow(self, snap: MarketSnapshot, d: Direction) -> bool:
-        """CVD, OB imbalance, momentum, volume conditions."""
+        """CVD, OB imbalance, momentum, volume — adaptive thresholds."""
+        ap = snap.adaptive
         # CVD expanding in direction
         if d == Direction.LONG and snap.cvd_delta_1m <= 0:
             return False
         if d == Direction.SHORT and snap.cvd_delta_1m >= 0:
             return False
-        # OB imbalance
+        # OB imbalance (adaptive)
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-        if d == Direction.LONG and ob < OB_IMBALANCE_MIN:
+        if d == Direction.LONG and ob < ap.ob_min:
             return False
-        if d == Direction.SHORT and ob > (1 - OB_IMBALANCE_MIN):
+        if d == Direction.SHORT and ob > (1 - ap.ob_min):
             return False
-        # 1m momentum: last 3 closes in direction
+        # 1m momentum
         candles_1m = list(snap.klines_1m)
         if len(candles_1m) < MOMENTUM_BARS + 1:
             return False
@@ -90,14 +90,15 @@ class ContinuationBreak(BaseStrategy):
         else:
             if not all(c["c"] < c["o"] for c in recent):
                 return False
-        # Volume spike
-        if volume_spike_ratio(candles_1m) < VOLUME_SPIKE_MIN:
+        # Volume spike (adaptive)
+        if volume_spike_ratio(candles_1m) < ap.volume_spike_min:
             return False
         return True
 
     def _build_signal(
         self, snap: MarketSnapshot, d: Direction, ml_boost: float,
     ) -> Signal | None:
+        ap = snap.adaptive
         candles_3m = list(snap.klines_3m)
         last = candles_3m[-1]
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
@@ -115,31 +116,35 @@ class ContinuationBreak(BaseStrategy):
             ml_boost=min(ml_boost, 0.10),
         )
         score = comp.total()
-        if score < CB_MIN_SCORE:
+        if score < ap.min_score:
+            return None
+
+        atr_val = ap.atr_value
+        if atr_val <= 0:
             return None
 
         buffer = snap.price * ENTRY_BUFFER_PCT
-        # Minimum SL: max of (0.75× ATR, 0.25% of price), capped at 0.5%
-        atr_floor = snap.indicators.atr * 0.75 if snap.indicators.atr else 0
-        pct_floor = snap.price * 0.0025  # absolute 0.25% minimum
-        max_sl_dist = snap.price * 0.005  # cap at 0.5%
-        min_sl_dist = min(max(atr_floor, pct_floor), max_sl_dist)
+        max_sl_dist = atr_val * ap.max_sl_atr
+        min_sl_dist = atr_val * ap.min_sl_atr
         if d == Direction.LONG:
             entry = last["c"] + buffer
             raw_risk = entry - last["l"]
-            risk = max(raw_risk, min_sl_dist) if min_sl_dist else raw_risk
-            risk = min(risk, max_sl_dist)  # cap SL at 0.5%
-            sl = entry - risk
         else:
             entry = last["c"] - buffer
             raw_risk = last["h"] - entry
-            risk = max(raw_risk, min_sl_dist) if min_sl_dist else raw_risk
-            risk = min(risk, max_sl_dist)  # cap SL at 0.5%
-            sl = entry + risk
 
-        if risk <= 0:
+        # Reject if natural risk exceeds ATR cap
+        if raw_risk > max_sl_dist:
             return None
-        tp = entry + risk * TP_RR if d == Direction.LONG else entry - risk * TP_RR
+
+        risk = max(raw_risk, min_sl_dist)
+        if risk <= 0 or (raw_risk > 0 and risk > raw_risk * 3):
+            return None  # floor inflated SL beyond structural level
+        if d == Direction.LONG:
+            sl = entry - risk
+        else:
+            sl = entry + risk
+        tp = entry + risk * ap.tp_rr if d == Direction.LONG else entry - risk * ap.tp_rr
 
         return Signal(
             symbol=snap.symbol,

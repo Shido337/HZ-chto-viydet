@@ -40,6 +40,33 @@ class IndicatorSet:
     atr_percentile: float = 50.0
 
 
+# ---------------------------------------------------------------------------
+# Adaptive parameters — computed per-symbol from rolling market stats
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class AdaptiveParams:
+    """ATR-relative thresholds that adapt to each symbol's volatility."""
+    # Risk management (ATR-multiples)
+    max_sl_atr: float = 2.0       # max SL = 2× ATR
+    min_sl_atr: float = 0.5       # min SL = 0.5× ATR
+    # TP ratios (adjusted by regime & performance)
+    tp_rr: float = 1.5            # risk:reward
+    # Trailing (ATR-relative)
+    trail_activation_atr: float = 0.5  # activate at 0.5× ATR profit
+    trail_distance_atr: float = 0.3    # trail distance = 0.3× ATR
+    # Breakeven
+    breakeven_trigger_atr: float = 0.4  # BE at 0.4× ATR
+    # Score threshold (adjusted by learner)
+    min_score: float = 0.65
+    # Volume threshold (rolling-relative)
+    volume_spike_min: float = 0.7
+    # OB imbalance threshold
+    ob_min: float = 0.55
+    # ATR value for this symbol (absolute, for calculations)
+    atr_value: float = 0.0
+
+
 @dataclass(frozen=True)
 class MarketSnapshot:
     """Immutable point-in-time copy handed to strategies."""
@@ -54,6 +81,7 @@ class MarketSnapshot:
     volume_1m: float = 0.0
     regime: MarketRegime = MarketRegime.RANGING
     indicators: IndicatorSet = field(default_factory=IndicatorSet)
+    adaptive: AdaptiveParams = field(default_factory=AdaptiveParams)
     klines_1m: tuple[dict[str, Any], ...] = ()
     klines_3m: tuple[dict[str, Any], ...] = ()
     klines_5m: tuple[dict[str, Any], ...] = ()
@@ -85,6 +113,7 @@ class MarketCache:
         self.regime: dict[str, MarketRegime] = {}
         self.indicators: dict[str, IndicatorSet] = {}
         self.agg_trades: dict[str, deque[dict[str, Any]]] = {}
+        self.adaptive_params: dict[str, AdaptiveParams] = {}
         self._locks: dict[str, asyncio.Lock] = {}
         self._stale: dict[str, bool] = {}
         # CVD tracking for 1-minute rotation
@@ -110,6 +139,7 @@ class MarketCache:
         self.volume_1m[symbol] = 0.0
         self.regime[symbol] = MarketRegime.RANGING
         self.indicators[symbol] = IndicatorSet()
+        self.adaptive_params[symbol] = AdaptiveParams()
         self.agg_trades[symbol] = deque(maxlen=MAX_AGG_TRADES)
         self._stale[symbol] = False
         self._cvd_at_1m_start[symbol] = 0.0
@@ -179,6 +209,12 @@ class MarketCache:
         async with self._lock(symbol):
             self.indicators[symbol] = ind
 
+    async def update_adaptive(
+        self, symbol: str, params: AdaptiveParams,
+    ) -> None:
+        async with self._lock(symbol):
+            self.adaptive_params[symbol] = params
+
     def mark_stale(self, symbol: str) -> None:
         self._stale[symbol] = True
 
@@ -211,6 +247,7 @@ class MarketCache:
             volume_1m=self.volume_1m.get(symbol, 0.0),
             regime=self.regime.get(symbol, MarketRegime.RANGING),
             indicators=self.indicators.get(symbol, IndicatorSet()),
+            adaptive=self.adaptive_params.get(symbol, AdaptiveParams()),
             klines_1m=tuple(klines.get("1m", deque())),
             klines_3m=tuple(klines.get("3m", deque())),
             klines_5m=tuple(klines.get("5m", deque())),

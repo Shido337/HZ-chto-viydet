@@ -6,19 +6,19 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from core.signal_generator import Direction, PendingOrder, Position, Signal
-from data.cache import MarketCache
+from data.cache import AdaptiveParams, MarketCache
 
 if TYPE_CHECKING:
     from data.cache import MarketSnapshot
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants (fallbacks — adaptive params override when available)
 # ---------------------------------------------------------------------------
-TRAILING_ACTIVATION_RR = 0.3  # activate trailing at 0.3× risk — catch any move
-TRAILING_PCT = 0.0015         # 0.15% trailing — ultra tight for scalp
-BREAKEVEN_TRIGGER_RR = 0.2    # move SL to entry at 0.2× risk (protect ASAP)
+TRAILING_ACTIVATION_RR = 0.5  # fallback: activate trailing at 0.5× risk
+TRAILING_RISK_FACTOR = 0.4    # fallback: trail distance = 40% of original risk
+MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
+BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
 MAX_HOLD_MINUTES = 5          # SCALPING: 5 min max, no lingering
-SL_WIDEN_HIGH_VOL = 0.30      # 30% wider SL in HIGH_VOL
 LEVERAGE = 25
 CVD_EXIT_MIN_PNL_PCT = 0.001  # 0.1% profit enough for CVD exit
 # Binance futures fees: maker 0.02%, taker 0.04%
@@ -125,6 +125,7 @@ class PaperTrader:
                     size_usdt=order.size_usdt,
                     quantity=order.quantity,
                     best_price=order.entry_price,
+                    original_risk=abs(order.entry_price - order.sl_price),
                 )
                 self.positions[symbol] = pos
                 del self.pending[symbol]
@@ -168,9 +169,10 @@ class PaperTrader:
             if snap.stale or not snap.price:
                 continue
             pos = self.positions[symbol]
+            ap = snap.adaptive
             self._update_price_tracking(pos, snap.price)
-            self._check_breakeven(pos, snap.price)
-            self._check_trailing(pos, snap.price)
+            self._check_breakeven(pos, snap.price, ap)
+            self._check_trailing(pos, snap.price, ap)
             reason = self._check_exits(pos, snap)
             if reason:
                 p = self.close_position(symbol, snap.price, reason)
@@ -189,11 +191,15 @@ class PaperTrader:
         pos.current_pnl = PaperTrader._calc_pnl(pos, price)
 
     @staticmethod
-    def _check_breakeven(pos: Position, price: float) -> None:
+    def _check_breakeven(pos: Position, price: float, ap: AdaptiveParams) -> None:
         if pos.breakeven_moved:
             return
-        risk = abs(pos.entry_price - pos.sl_price)
-        trigger = risk * BREAKEVEN_TRIGGER_RR
+        atr_val = ap.atr_value
+        if atr_val > 0:
+            trigger = atr_val * ap.breakeven_trigger_atr
+        else:
+            risk = pos.original_risk or abs(pos.entry_price - pos.sl_price)
+            trigger = risk * BREAKEVEN_TRIGGER_RR
         # Offset BE by round-trip fees so "breakeven" doesn't lose money
         fee_buffer = pos.entry_price * (MAKER_FEE + TAKER_FEE)
         if pos.direction == Direction.LONG:
@@ -206,21 +212,27 @@ class PaperTrader:
                 pos.breakeven_moved = True
 
     @staticmethod
-    def _check_trailing(pos: Position, price: float) -> None:
-        risk = abs(pos.entry_price - pos.sl_price)
-        rr_trigger = risk * TRAILING_ACTIVATION_RR
+    def _check_trailing(pos: Position, price: float, ap: AdaptiveParams) -> None:
+        atr_val = ap.atr_value
+        if atr_val > 0:
+            rr_trigger = atr_val * ap.trail_activation_atr
+            trail_distance = max(atr_val * ap.trail_distance_atr, pos.entry_price * MIN_TRAIL_PCT)
+        else:
+            risk = pos.original_risk or abs(pos.entry_price - pos.sl_price)
+            rr_trigger = risk * TRAILING_ACTIVATION_RR
+            trail_distance = max(risk * TRAILING_RISK_FACTOR, pos.entry_price * MIN_TRAIL_PCT)
         if pos.direction == Direction.LONG:
             if price >= pos.entry_price + rr_trigger:
                 pos.trailing_activated = True
             if pos.trailing_activated:
-                trail_sl = pos.best_price * (1 - TRAILING_PCT)
+                trail_sl = pos.best_price - trail_distance
                 if trail_sl > pos.sl_price:
                     pos.sl_price = trail_sl
         else:
             if price <= pos.entry_price - rr_trigger:
                 pos.trailing_activated = True
             if pos.trailing_activated:
-                trail_sl = pos.best_price * (1 + TRAILING_PCT)
+                trail_sl = pos.best_price + trail_distance
                 if trail_sl < pos.sl_price:
                     pos.sl_price = trail_sl
 

@@ -54,20 +54,43 @@ export const CandleChart: React.FC = () => {
     };
   }, []);
 
+  // Full data load on symbol or timeframe change
+  const prevSymRef = useRef('');
+  const prevTfRef = useRef('');
+  const dataLoadedRef = useRef(false);
   useEffect(() => {
     if (!seriesRef.current || !snap) return;
     const klines =
       tf === '1m' ? snap.klines_1m : tf === '3m' ? snap.klines_3m : snap.klines_5m;
     if (!klines?.length) return;
-    const data: CandlestickData[] = klines.map((k) => ({
-      time: (k.t / 1000) as Time,
-      open: k.o,
-      high: k.h,
-      low: k.l,
-      close: k.c,
-    }));
-    seriesRef.current.setData(data);
-  }, [snap, tf]);
+
+    // Full setData on first load or symbol/tf change
+    if (!dataLoadedRef.current || prevSymRef.current !== symbol || prevTfRef.current !== tf) {
+      prevSymRef.current = symbol;
+      prevTfRef.current = tf;
+      dataLoadedRef.current = true;
+      const data: CandlestickData[] = klines.map((k) => ({
+        time: (k.t / 1000) as Time,
+        open: k.o,
+        high: k.h,
+        low: k.l,
+        close: k.c,
+      }));
+      seriesRef.current.setData(data);
+    } else {
+      // Incremental update — only the last candle
+      const last = klines[klines.length - 1];
+      if (last) {
+        seriesRef.current.update({
+          time: (last.t / 1000) as Time,
+          open: last.o,
+          high: last.h,
+          low: last.l,
+          close: last.c,
+        });
+      }
+    }
+  }, [snap, tf, symbol]);
 
   // -- Price level lines (Entry / SL / TP / Trailing) ----------------------
   useEffect(() => {

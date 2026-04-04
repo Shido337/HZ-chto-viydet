@@ -118,7 +118,21 @@ async def _on_position_opened(pos: Position) -> None:
     })
 
 
+# Throttle kline broadcasts: max once per second per symbol+tf
+_kline_last_sent: dict[str, float] = {}
+_KLINE_THROTTLE = 1.0  # seconds
+
+
 async def _on_kline_update(symbol: str, tf: str, candle: dict[str, Any]) -> None:
+    import time as _time
+    # Always send closed candles immediately
+    if not candle.get("closed", False):
+        key = f"{symbol}:{tf}"
+        now = _time.monotonic()
+        last = _kline_last_sent.get(key, 0.0)
+        if now - last < _KLINE_THROTTLE:
+            return
+        _kline_last_sent[key] = now
     await ws_mgr.broadcast({
         "type": "kline_update",
         "data": {"symbol": symbol, "tf": tf, "candle": candle},

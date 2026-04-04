@@ -13,7 +13,7 @@ from core.regime_classifier import RegimeClassifier
 from core.risk_manager import RiskManager
 from core.signal_generator import PendingOrder, Signal
 from core.coin_screener import CoinScreener, SCREENER_INTERVAL
-from data.cache import MarketCache, MarketRegime
+from data.cache import AdaptiveParams, MarketCache, MarketRegime
 from exchange.binance_client import BinanceClient
 from exchange.binance_ws import BinanceWS
 from exchange.order_executor import OrderExecutor
@@ -29,7 +29,6 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 REGIME_UPDATE_INTERVAL = 30  # seconds
 LOOP_INTERVAL = 1.0
-SL_WIDEN_HIGH_VOL = 0.30
 MAX_CONSECUTIVE_ERRORS = 10
 MAX_SIGNALS_HISTORY = 200
 
@@ -372,14 +371,6 @@ class BotEngine:
 
     async def _process_signal(self, signal: Signal) -> None:
         snap = self.cache.get_snapshot(signal.symbol)
-        # HIGH_VOL: widen SL by 30%
-        if snap.regime == MarketRegime.HIGH_VOL:
-            risk = abs(signal.entry_price - signal.sl_price)
-            widen = risk * SL_WIDEN_HIGH_VOL
-            if signal.direction.value == "LONG":
-                signal.sl_price -= widen
-            else:
-                signal.sl_price += widen
 
         size = self.risk.compute_size(
             balance=self.risk.session_start_balance + self.risk.daily_pnl,
@@ -476,6 +467,100 @@ class BotEngine:
             await self.cache.update_indicators(symbol, indicators)
             if self._on_regime:
                 await self._on_regime(symbol, regime.value)
+            # Compute ATR-adaptive params per symbol
+            await self._compute_adaptive_params(symbol, regime, indicators.atr, indicators.atr_percentile)
+
+    # -- adaptive params computation ----------------------------------------
+
+    async def _compute_adaptive_params(
+        self,
+        symbol: str,
+        regime: MarketRegime,
+        atr_val: float,
+        atr_pct: float,
+    ) -> None:
+        """Compute AdaptiveParams per symbol from regime, ATR, and learner feedback."""
+        if atr_val <= 0:
+            return
+
+        # --- SL bounds (ATR-multiples) adjusted by regime ---
+        # Base: 0.5–2.0 ATR.  Tighter in trending (clear structure),
+        # wider in ranging/high-vol (noise).
+        if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
+            max_sl = 1.5
+            min_sl = 0.4
+        elif regime == MarketRegime.HIGH_VOL:
+            max_sl = 3.0
+            min_sl = 0.8
+        elif regime == MarketRegime.LOW_VOL:
+            max_sl = 2.0
+            min_sl = 0.3
+        else:  # RANGING
+            max_sl = 2.0
+            min_sl = 0.5
+
+        # --- TP ratio adjusted by regime ---
+        if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
+            tp_rr = 1.8   # trends run further
+        elif regime == MarketRegime.HIGH_VOL:
+            tp_rr = 1.2   # take profits sooner in high vol
+        elif regime == MarketRegime.LOW_VOL:
+            tp_rr = 2.0   # low vol = need wider target
+        else:  # RANGING
+            tp_rr = 1.5
+
+        # --- Trailing distances (ATR-relative) ---
+        if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
+            trail_activation = 0.4   # activate early in trends
+            trail_distance = 0.25    # tight trail to lock profits
+            be_trigger = 0.35
+        elif regime == MarketRegime.HIGH_VOL:
+            trail_activation = 0.8   # wait longer in high vol
+            trail_distance = 0.5     # wide trail for noise
+            be_trigger = 0.6
+        else:  # RANGING / LOW_VOL
+            trail_activation = 0.5
+            trail_distance = 0.3
+            be_trigger = 0.4
+
+        # --- OB & volume thresholds adjusted by ATR percentile ---
+        # Low ATR percentile = quiet market → relax filters to find trades
+        # High ATR percentile = active market → tighten for quality
+        if atr_pct < 30:
+            ob_min = 0.52
+            vol_spike_min = 0.5
+        elif atr_pct < 60:
+            ob_min = 0.55
+            vol_spike_min = 0.7
+        else:
+            ob_min = 0.58
+            vol_spike_min = 0.9
+
+        # --- Learner feedback into min_score ---
+        base_score = 0.65
+        # Check all setup types and take the most relevant adjustment
+        adjustments: list[float] = []
+        for setup_name in ("CONTINUATION_BREAK", "MEAN_REVERSION", "EARLY_MOMENTUM"):
+            adj = self.learner.get_score_adjustment(setup_name, symbol)
+            if adj != 0.0:
+                adjustments.append(adj)
+        # Use average adjustment if any, otherwise 0
+        score_delta = sum(adjustments) / len(adjustments) if adjustments else 0.0
+        min_score = max(0.50, min(0.80, base_score + score_delta))
+
+        params = AdaptiveParams(
+            max_sl_atr=max_sl,
+            min_sl_atr=min_sl,
+            tp_rr=tp_rr,
+            trail_activation_atr=trail_activation,
+            trail_distance_atr=trail_distance,
+            breakeven_trigger_atr=be_trigger,
+            min_score=min_score,
+            volume_spike_min=vol_spike_min,
+            ob_min=ob_min,
+            atr_value=atr_val,
+        )
+        await self.cache.update_adaptive(symbol, params)
 
     # -- WebSocket setup ----------------------------------------------------
 
@@ -581,8 +666,8 @@ class BotEngine:
             # Rotate CVD delta on 1m close
             if tf == "1m" and candle["closed"]:
                 self.cache.rotate_1m_delta(symbol)
-            # Forward closed candles to dashboard
-            if self._on_kline_update and candle["closed"]:
+            # Forward every candle tick to dashboard (live updates)
+            if self._on_kline_update:
                 await self._on_kline_update(symbol, tf, candle)
         return handler
 

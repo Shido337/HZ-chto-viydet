@@ -72,6 +72,7 @@ class Position:
     # lifecycle tracking
     opened_at: float = field(default_factory=time.time)
     best_price: float = 0.0
+    original_risk: float = 0.0  # abs(entry - sl) at open, never changes
     trailing_activated: bool = False
     breakeven_moved: bool = False
     current_pnl: float = 0.0

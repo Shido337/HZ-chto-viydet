@@ -12,6 +12,11 @@ RECENT_WINDOW = 20
 MAX_BOOST = 0.10
 DRIFT_THRESHOLD = 0.15  # |recent_wr - overall_wr| > this → drifting
 
+# Score adjustment bounds
+SCORE_LOWER_MAX = -0.08   # max loosening when performing well
+SCORE_RAISE_MAX = 0.12    # max tightening when performing poorly
+NEUTRAL_WR = 0.45         # win rate considered neutral (no adjustment)
+
 
 class OnlineLearner:
     """Lightweight per-(setup, symbol) win-rate tracker with drift detection."""
@@ -43,6 +48,27 @@ class OnlineLearner:
         if wr <= 0.5:
             return 0.0
         return min((wr - 0.5) * 0.20, MAX_BOOST)
+
+    # -- score adjustment for adaptive params --------------------------------
+
+    def get_score_adjustment(self, setup_type: str, symbol: str) -> float:
+        """Return delta for min_score: negative = loosen, positive = tighten.
+
+        Uses recent window for responsiveness.  Returns 0.0 until enough
+        samples are collected.
+        """
+        key = f"{setup_type}:{symbol}"
+        recent = self._recent.get(key, [])
+        if len(recent) < MIN_SAMPLES:
+            return 0.0
+        wr = sum(recent) / len(recent)
+        if wr > NEUTRAL_WR:
+            # Winning → lower threshold proportionally (max SCORE_LOWER_MAX)
+            ratio = (wr - NEUTRAL_WR) / (1.0 - NEUTRAL_WR)
+            return SCORE_LOWER_MAX * ratio
+        # Losing → raise threshold proportionally (max SCORE_RAISE_MAX)
+        ratio = (NEUTRAL_WR - wr) / NEUTRAL_WR
+        return SCORE_RAISE_MAX * ratio
 
     # -- stats for dashboard ------------------------------------------------
 

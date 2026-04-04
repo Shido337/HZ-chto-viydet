@@ -11,15 +11,16 @@ from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy, MIN_SCORE
 
 # ---------------------------------------------------------------------------
-# Thresholds (prompt: MEAN_REVERSION / liquidity sweep)
+# Fixed structural constants (NOT volatility-dependent)
 # ---------------------------------------------------------------------------
 SWEEP_MIN_PCT = 0.0002    # 0.02% beyond swing
 SWEEP_MAX_PCT = 0.0080    # 0.80% beyond swing
-OB_FLIP_MIN = 0.52        # 52% opposite after flip
 VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP
 SL_BUFFER_PCT = 0.0005    # 0.05% beyond sweep extreme
-MIN_RR = 1.0              # minimum 1:1 reward/risk (scalping)
-MR_TP_RR = 1.2            # 1:1.2 — fast reversion take-profit
+MIN_RR = 0.5              # minimum 0.5:1 — trailing compensates
+# Adaptive constants come from snap.adaptive:
+#   ob_min (as flip threshold), min_score, tp_rr,
+#   max_sl_atr, min_sl_atr, atr_value
 
 
 class MeanReversion(BaseStrategy):
@@ -54,6 +55,7 @@ class MeanReversion(BaseStrategy):
         if swing_h == 0 or swing_l == 0:
             return None
 
+        ob_flip = snap.adaptive.ob_min
         # Check last 3 candles for sweep pattern
         for c in candles_1m[-3:]:
             # Short setup: sweep above high then close back inside
@@ -63,7 +65,7 @@ class MeanReversion(BaseStrategy):
                     if c["c"] < swing_h:  # wick rejection
                         if snap.cvd_delta_1m < 0:  # CVD reversal
                             ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-                            if ob < (1 - OB_FLIP_MIN):
+                            if ob < (1 - ob_flip):
                                 return Direction.SHORT
 
             # Long setup: sweep below low then close back inside
@@ -73,12 +75,12 @@ class MeanReversion(BaseStrategy):
                     if c["c"] > swing_l:  # wick rejection
                         if snap.cvd_delta_1m > 0:  # CVD reversal
                             ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-                            if ob > OB_FLIP_MIN:
+                            if ob > ob_flip:
                                 return Direction.LONG
         return None
 
     def _check_vwap(self, snap: MarketSnapshot) -> bool:
-        """Price must be within ±1.5% of VWAP."""
+        """Price must be within ±2% of VWAP."""
         candles = list(snap.klines_1m)
         if not candles:
             return False
@@ -91,6 +93,7 @@ class MeanReversion(BaseStrategy):
     def _build_signal(
         self, snap: MarketSnapshot, d: Direction, ml_boost: float,
     ) -> Signal | None:
+        ap = snap.adaptive
         candles_1m = list(snap.klines_1m)
         last = candles_1m[-1]
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
@@ -106,32 +109,35 @@ class MeanReversion(BaseStrategy):
             ml_boost=min(ml_boost, 0.10),
         )
         score = comp.total()
-        if score < MIN_SCORE:
+        if score < ap.min_score:
             return None
 
-        # Minimum SL: max of (0.75× ATR, 0.25% of price), capped at 0.5%
-        atr_floor = snap.indicators.atr * 0.75 if snap.indicators.atr else 0
-        pct_floor = snap.price * 0.0025  # absolute 0.25% minimum
-        max_sl_dist = snap.price * 0.005  # cap at 0.5%
-        min_sl_dist = min(max(atr_floor, pct_floor), max_sl_dist)
+        atr_val = ap.atr_value
+        if atr_val <= 0:
+            return None
+
+        max_sl_dist = atr_val * ap.max_sl_atr
+        min_sl_dist = atr_val * ap.min_sl_atr
         if d == Direction.LONG:
             entry = last["c"]
             raw_risk = entry - (last["l"] - last["l"] * SL_BUFFER_PCT)
-            risk = max(raw_risk, min_sl_dist) if min_sl_dist else raw_risk
-            risk = min(risk, max_sl_dist)  # cap SL at 0.5%
-            sl = entry - risk
-            tp = entry + risk * MR_TP_RR
         else:
             entry = last["c"]
             raw_risk = (last["h"] + last["h"] * SL_BUFFER_PCT) - entry
-            risk = max(raw_risk, min_sl_dist) if min_sl_dist else raw_risk
-            risk = min(risk, max_sl_dist)  # cap SL at 0.5%
-            sl = entry + risk
-            tp = entry - risk * MR_TP_RR
 
-        risk = abs(entry - sl)
-        if risk <= 0:
+        # Reject if natural risk exceeds ATR cap
+        if raw_risk > max_sl_dist:
             return None
+
+        risk = max(raw_risk, min_sl_dist)
+        if risk <= 0 or (raw_risk > 0 and risk > raw_risk * 3):
+            return None  # floor inflated SL beyond structural level
+        if d == Direction.LONG:
+            sl = entry - risk
+            tp = entry + risk * ap.tp_rr
+        else:
+            sl = entry + risk
+            tp = entry - risk * ap.tp_rr
         # Ensure TP is on correct side and meets minimum RR
         reward = abs(tp - entry)
         if d == Direction.LONG and tp <= entry:
