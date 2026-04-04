@@ -17,6 +17,7 @@ SWEEP_MIN_PCT = 0.0002    # 0.02% beyond swing
 SWEEP_MAX_PCT = 0.0080    # 0.80% beyond swing
 VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP
 SL_BUFFER_PCT = 0.0005    # 0.05% beyond sweep extreme
+ENTRY_RETRACEMENT = 0.5   # enter at 50% of sweep_extreme→swing_level range
 MIN_RR = 0.5              # minimum 0.5:1 — trailing compensates
 # Adaptive constants come from snap.adaptive:
 #   ob_min (as flip threshold), min_score, tp_rr,
@@ -119,13 +120,12 @@ class MeanReversion(BaseStrategy):
         max_sl_dist = atr_val * ap.max_sl_atr
         min_sl_dist = atr_val * ap.min_sl_atr
 
-        # Entry at swing level (where bounce expected), SL beyond sweep extreme
+        # Entry at retracement into sweep zone, SL beyond sweep extreme
+        entry = swing_level + (sweep_extreme - swing_level) * ENTRY_RETRACEMENT
         if d == Direction.LONG:
-            entry = swing_level
             sl_raw = sweep_extreme - sweep_extreme * SL_BUFFER_PCT
             raw_risk = entry - sl_raw
         else:
-            entry = swing_level
             sl_raw = sweep_extreme + sweep_extreme * SL_BUFFER_PCT
             raw_risk = sl_raw - entry
 

@@ -1,5 +1,11 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-04 23:12 UTC]
+Fix late MR entry — two changes:
+1. MR entry at 50% retracement between sweep_extreme and swing_level (was at swing_level = entering after bounce)
+2. Paper trader limit: LONG uses min(bid, signal.entry), SHORT uses max(ask, signal.entry) — respects signal target instead of overriding with current bid/ask
+Files: strategies/mean_reversion.py, core/paper_trader.py
+
 ## [2025-06-18 12:30 UTC]
 Fix 3 paper trading bugs:
 1. TP/SL exits now fill at their level price (not snap.price) — fixes phantom PnL mismatch where dashboard showed higher unrealized PnL

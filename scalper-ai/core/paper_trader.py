@@ -54,12 +54,12 @@ class PaperTrader:
             logger.warning(f"[PAPER] Rejected {signal.symbol}: TP {signal.tp_price} >= entry {signal.entry_price}")
             return None
 
-        # Use order book for better entry: bid for LONG, ask for SHORT
+        # Limit order: use best available but never worse than signal target
         snap = self.cache.get_snapshot(signal.symbol)
         if signal.direction == Direction.LONG:
-            entry = snap.bid if snap.bid > 0 else signal.entry_price
+            entry = min(snap.bid, signal.entry_price) if snap.bid > 0 else signal.entry_price
         else:
-            entry = snap.ask if snap.ask > 0 else signal.entry_price
+            entry = max(snap.ask, signal.entry_price) if snap.ask > 0 else signal.entry_price
 
         # Shift SL/TP by the same delta so risk/reward stays proportional
         shift = entry - signal.entry_price
