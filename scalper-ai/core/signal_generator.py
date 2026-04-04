@@ -77,6 +77,7 @@ class Position:
     trailing_activated: bool = False
     breakeven_moved: bool = False
     current_pnl: float = 0.0
+    exit_price: float = 0.0
 
 
 @dataclass

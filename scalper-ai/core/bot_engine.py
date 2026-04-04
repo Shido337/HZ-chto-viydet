@@ -458,7 +458,7 @@ class BotEngine:
                     setup_type=DBSetupType(pos.setup_type.value),
                     score=pos.score,
                     entry_price=pos.entry_price,
-                    exit_price=self.cache.get_snapshot(pos.symbol).price,
+                    exit_price=pos.exit_price if pos.exit_price else self.cache.get_snapshot(pos.symbol).price,
                     sl_price=pos.sl_price,
                     tp_price=pos.tp_price,
                     size_usdt=pos.size_usdt,

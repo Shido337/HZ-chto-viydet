@@ -1,5 +1,12 @@
 # SCALPER-AI CHANGELOG
 
+## [2025-06-18 12:30 UTC]
+Fix 3 paper trading bugs:
+1. TP/SL exits now fill at their level price (not snap.price) — fixes phantom PnL mismatch where dashboard showed higher unrealized PnL
+2. Mean Reversion entry uses swing level (bounce point) instead of last candle close — fixes LONG entries at candle tops
+3. exit_price stored on Position dataclass and used in _persist_trade — DB records accurate exit prices
+Files: core/paper_trader.py, strategies/mean_reversion.py, core/signal_generator.py, core/bot_engine.py
+
 ## [2025-06-18 12:00 UTC]
 Fix empty chart on symbol switch: added REST endpoint GET /api/klines/{symbol} returning cached klines. CandleChart now fetches klines via REST fallback when store has no data (e.g. after symbol rotation or partial kline load failure). Added fitContent() after setData for proper auto-scroll.
 Files: server/api.py, dashboard/src/components/CandleChart.tsx

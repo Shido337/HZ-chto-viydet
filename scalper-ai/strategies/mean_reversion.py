@@ -41,12 +41,15 @@ class MeanReversion(BaseStrategy):
             return None
         if not self._check_vwap(snap):
             return None
-        return self._build_signal(snap, direction, ml_boost)
+        d, sweep_extreme, swing_level = direction
+        return self._build_signal(snap, d, sweep_extreme, swing_level, ml_boost)
 
     # -- sub-checks ---------------------------------------------------------
 
-    def _detect_sweep(self, snap: MarketSnapshot) -> Direction | None:
-        """Detect liquidity sweep beyond swing + wick rejection."""
+    def _detect_sweep(
+        self, snap: MarketSnapshot,
+    ) -> tuple[Direction, float, float] | None:
+        """Detect liquidity sweep. Returns (direction, sweep_extreme, swing_level)."""
         candles_1m = list(snap.klines_1m)
         if len(candles_1m) < 8:
             return None
@@ -56,27 +59,24 @@ class MeanReversion(BaseStrategy):
             return None
 
         ob_flip = snap.adaptive.ob_min
-        # Check last 3 candles for sweep pattern
         for c in candles_1m[-3:]:
-            # Short setup: sweep above high then close back inside
             if c["h"] > swing_h:
                 sweep_pct = (c["h"] - swing_h) / swing_h
                 if SWEEP_MIN_PCT <= sweep_pct <= SWEEP_MAX_PCT:
-                    if c["c"] < swing_h:  # wick rejection
-                        if snap.cvd_delta_1m < 0:  # CVD reversal
+                    if c["c"] < swing_h:
+                        if snap.cvd_delta_1m < 0:
                             ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
                             if ob < (1 - ob_flip):
-                                return Direction.SHORT
+                                return (Direction.SHORT, c["h"], swing_h)
 
-            # Long setup: sweep below low then close back inside
             if c["l"] < swing_l:
                 sweep_pct = (swing_l - c["l"]) / swing_l
                 if SWEEP_MIN_PCT <= sweep_pct <= SWEEP_MAX_PCT:
-                    if c["c"] > swing_l:  # wick rejection
-                        if snap.cvd_delta_1m > 0:  # CVD reversal
+                    if c["c"] > swing_l:
+                        if snap.cvd_delta_1m > 0:
                             ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
                             if ob > ob_flip:
-                                return Direction.LONG
+                                return (Direction.LONG, c["l"], swing_l)
         return None
 
     def _check_vwap(self, snap: MarketSnapshot) -> bool:
@@ -91,11 +91,11 @@ class MeanReversion(BaseStrategy):
         return dev <= VWAP_DEV_MAX
 
     def _build_signal(
-        self, snap: MarketSnapshot, d: Direction, ml_boost: float,
+        self, snap: MarketSnapshot, d: Direction,
+        sweep_extreme: float, swing_level: float, ml_boost: float,
     ) -> Signal | None:
         ap = snap.adaptive
         candles_1m = list(snap.klines_1m)
-        last = candles_1m[-1]
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
         vwap_val = calc_vwap(candles_1m)
 
@@ -103,8 +103,8 @@ class MeanReversion(BaseStrategy):
         comp = ScoreComponents(
             cvd_alignment=min(cvd_usd / 5000, 1.0) * 0.25,
             ob_imbalance=(ob if d == Direction.LONG else 1 - ob) * 0.20,
-            volume_confirmation=0.10,  # sweep itself is volume event
-            structure_quality=0.12,    # clean wick rejection
+            volume_confirmation=0.10,
+            structure_quality=0.12,
             regime_match=0.15,
             ml_boost=min(ml_boost, 0.10),
         )
@@ -118,27 +118,29 @@ class MeanReversion(BaseStrategy):
 
         max_sl_dist = atr_val * ap.max_sl_atr
         min_sl_dist = atr_val * ap.min_sl_atr
-        if d == Direction.LONG:
-            entry = last["c"]
-            raw_risk = entry - (last["l"] - last["l"] * SL_BUFFER_PCT)
-        else:
-            entry = last["c"]
-            raw_risk = (last["h"] + last["h"] * SL_BUFFER_PCT) - entry
 
-        # Reject if natural risk exceeds ATR cap
+        # Entry at swing level (where bounce expected), SL beyond sweep extreme
+        if d == Direction.LONG:
+            entry = swing_level
+            sl_raw = sweep_extreme - sweep_extreme * SL_BUFFER_PCT
+            raw_risk = entry - sl_raw
+        else:
+            entry = swing_level
+            sl_raw = sweep_extreme + sweep_extreme * SL_BUFFER_PCT
+            raw_risk = sl_raw - entry
+
         if raw_risk > max_sl_dist:
             return None
 
         risk = max(raw_risk, min_sl_dist)
         if risk <= 0 or (raw_risk > 0 and risk > raw_risk * 3):
-            return None  # floor inflated SL beyond structural level
+            return None
         if d == Direction.LONG:
             sl = entry - risk
             tp = entry + risk * ap.tp_rr
         else:
             sl = entry + risk
             tp = entry - risk * ap.tp_rr
-        # Ensure TP is on correct side and meets minimum RR
         reward = abs(tp - entry)
         if d == Direction.LONG and tp <= entry:
             return None
