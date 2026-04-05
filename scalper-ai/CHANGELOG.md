@@ -181,3 +181,7 @@ Files: core/bot_engine.py
 ## [2026-04-05 10:52 UTC]
 Fix WS proxy, session filter date format, Performance Session/Total toggle
 Files: scalper-ai/core/bot_engine.py, scalper-ai/dashboard/src/hooks/useWebSocket.ts, scalper-ai/dashboard/src/components/Performance.tsx, scalper-ai/dashboard/vite.config.ts
+
+## [2026-04-05 11:42 UTC]
+Relax strategy filters to fix signal starvation: CB ADX_MAX 40->55, EM ADX range 18-30->15-35, EM CVD bars 3->2, EM ATR compression 55->70
+Files: strategies/continuation_break.py, strategies/early_momentum.py

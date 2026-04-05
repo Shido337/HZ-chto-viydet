@@ -13,10 +13,10 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # ---------------------------------------------------------------------------
 # Fixed structural constants (NOT volatility-dependent)
 # ---------------------------------------------------------------------------
-ADX_LOW = 18.0
-ADX_HIGH = 30.0
-ATR_COMPRESSION_PCT = 55.0   # bottom 55th percentile
-CVD_CONSECUTIVE_BARS = 3     # 3+ bars building
+ADX_LOW = 15.0
+ADX_HIGH = 35.0
+ATR_COMPRESSION_PCT = 70.0   # bottom 70th percentile
+CVD_CONSECUTIVE_BARS = 2     # 2+ bars building
 PRICE_NEAR_LEVEL_PCT = 0.008 # 0.8% of level
 MIN_RR = 0.5                 # minimum 0.5:1 — trailing compensates
 TREND_EMA_BARS = 20          # 5m EMA for trend alignment

@@ -21,7 +21,7 @@ RETEST_OVERSHOOT_PCT = 0.002   # allow up to 0.2% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
 MIN_RR = 1.5                   # minimum 1.5:1 (was 0.5 — too loose)
 MAX_SL_PCT = 0.008             # 0.8% hard cap: kills catastrophic swing-to-swing SLs
-ADX_MAX = 40.0                 # skip runaway trends (ADX>40) — no clean retest
+ADX_MAX = 55.0                 # skip runaway trends (ADX>55) — no clean retest
 # Adaptive constants come from snap.adaptive:
 #   ob_min, volume_spike_min, min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
