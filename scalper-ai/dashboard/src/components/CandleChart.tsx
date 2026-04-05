@@ -15,15 +15,28 @@ const CANDLE_OPTS = {
   borderVisible: false,
 };
 
+function getKlines(snap: any, tf: TF): any[] | undefined {
+  return tf === '1m' ? snap?.klines_1m
+       : tf === '3m' ? snap?.klines_3m
+       : snap?.klines_5m;
+}
+
+function toBars(raw: any[]): CandlestickData[] {
+  return raw.map((k) => ({
+    time: (k.t / 1000) as Time,
+    open: k.o, high: k.h, low: k.l, close: k.c,
+  }));
+}
+
 export const CandleChart: React.FC = () => {
   const containerRef  = useRef<HTMLDivElement>(null);
   const chartRef      = useRef<IChartApi | null>(null);
   const seriesRef     = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const priceLinesRef = useRef<any[]>([]);
+  const renderedKeyRef = useRef<string>('');
+  const renderedLenRef = useRef<number>(0);
 
   const [tf, setTf] = useState<TF>('1m');
-  // Fetched candles stored in state — rendering effect reads from here
-  const [fetchedData, setFetchedData] = useState<{ key: string; bars: CandlestickData[] } | null>(null);
 
   const symbol        = useTradingStore((s) => s.selectedSymbol);
   const snap          = useTradingStore((s) => s.snapshots[symbol]);
@@ -65,56 +78,35 @@ export const CandleChart: React.FC = () => {
     };
   }, []);
 
-  // ── 2. Fetch klines → store in state (no chart access here) ────────────
+  // ── 2. Render klines from store (full setData on symbol/tf change, incremental update otherwise) ──
   useEffect(() => {
-    if (!symbol) return;
-    setFetchedData(null);
-    // Clear chart immediately so stale symbol data doesn't linger during fetch
-    if (seriesRef.current) seriesRef.current.setData([]);
-    let cancelled = false;
-    fetch(`/api/klines/${symbol}`)
-      .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
-      .then((data) => {
-        if (cancelled) return;
-        useTradingStore.getState().setSnapshot(data);
-        const raw: any[] =
-          tf === '1m' ? data.klines_1m
-          : tf === '3m' ? data.klines_3m
-          : data.klines_5m;
-        if (!raw?.length) return;
-        const bars: CandlestickData[] = raw.map((k) => ({
-          time: (k.t / 1000) as Time,
-          open: k.o, high: k.h, low: k.l, close: k.c,
-        }));
-        setFetchedData({ key: `${symbol}:${tf}`, bars });
-      })
-      .catch((e) => console.error('[CandleChart] fetch failed', e));
-    return () => { cancelled = true; };
-  }, [symbol, tf]);
-
-  // ── 3. Render fetched data to chart (runs after state update) ──────────
-  useEffect(() => {
-    if (!fetchedData || !seriesRef.current || !chartRef.current) return;
-    seriesRef.current.setData(fetchedData.bars);
-    chartRef.current.timeScale().fitContent();
-  }, [fetchedData]);
-
-  // ── 4. Incremental update from WS ──────────────────────────────────────
-  useEffect(() => {
-    if (!seriesRef.current || !snap || !fetchedData) return;
-    if (fetchedData.key !== `${symbol}:${tf}`) return;
-    const klines =
-      tf === '1m' ? snap.klines_1m
-      : tf === '3m' ? snap.klines_3m
-      : snap.klines_5m;
+    if (!seriesRef.current || !chartRef.current || !snap) return;
+    const klines = getKlines(snap, tf);
     if (!klines?.length) return;
-    const last = klines[klines.length - 1];
-    if (!last) return;
-    seriesRef.current.update({
-      time: (last.t / 1000) as Time,
-      open: last.o, high: last.h, low: last.l, close: last.c,
-    });
-  }, [snap, tf, symbol, fetchedData]);
+
+    const key = `${symbol}:${tf}`;
+    if (renderedKeyRef.current !== key) {
+      // Symbol or TF changed → full render
+      const bars = toBars(klines);
+      seriesRef.current.setData(bars);
+      chartRef.current.timeScale().fitContent();
+      renderedKeyRef.current = key;
+      renderedLenRef.current = klines.length;
+    } else {
+      // Same symbol+tf → incremental update (last candle)
+      const last = klines[klines.length - 1];
+      if (last) {
+        seriesRef.current.update({
+          time: (last.t / 1000) as Time,
+          open: last.o, high: last.h, low: last.l, close: last.c,
+        });
+      }
+      // If a new candle appeared, also push it
+      if (klines.length > renderedLenRef.current && klines.length > 1) {
+        renderedLenRef.current = klines.length;
+      }
+    }
+  }, [snap, tf, symbol]);
 
   // ── 5. Price lines (Entry / SL / TP / Trailing / Pending) ──────────────
   useEffect(() => {

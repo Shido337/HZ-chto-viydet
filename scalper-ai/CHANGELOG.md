@@ -197,3 +197,7 @@ Files: scalper-ai/core/bot_engine.py, scalper-ai/core/paper_trader.py
 ## [2026-04-05 21:48 UTC]
 Engine: LOW_VOL regime uses MR-only; PaperTrader: time_stop losers-only, stale_exit 4min
 Files: scalper-ai/core/bot_engine.py, scalper-ai/core/paper_trader.py
+
+## [2026-04-05 21:48 UTC]
+Dashboard: CandleChart migrated to Zustand store-based rendering
+Files: scalper-ai/dashboard/src/components/CandleChart.tsx
