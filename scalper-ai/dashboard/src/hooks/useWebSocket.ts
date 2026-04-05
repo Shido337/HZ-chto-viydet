@@ -44,6 +44,18 @@ export function useWebSocket(): void {
           if (!symbols.includes(current) && symbols.length > 0) {
             store.setSelectedSymbol(symbols[0]);
           }
+          // Restore session trades from DB so stats survive dashboard refresh
+          fetch('/api/trades?limit=500')
+            .then((r) => r.json())
+            .then((rows: Array<{ symbol: string; direction: string; pnl: number; exit_reason: string }>) => {
+              const st = useTradingStore.getState();
+              if (st.trades.length === 0 && rows.length > 0) {
+                for (const r of rows.reverse()) {
+                  st.addTrade({ symbol: r.symbol, direction: r.direction as 'LONG' | 'SHORT', pnl: r.pnl, reason: r.exit_reason });
+                }
+              }
+            })
+            .catch(() => {});
           break;
         }
         case 'market_snapshot':

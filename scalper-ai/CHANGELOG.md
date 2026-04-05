@@ -165,3 +165,7 @@ Files: strategies/mean_reversion.py
 ## [2026-04-05 08:23 UTC]
 Dashboard fix: adaptive price formatting, score as %, clear chart on symbol change
 Files: dashboard/src/types/index.ts, dashboard/src/components/OpenPositions.tsx, dashboard/src/components/ActiveSignals.tsx, dashboard/src/components/CandleChart.tsx
+
+## [2026-04-05 08:26 UTC]
+Dashboard: restore trade history from DB on WS init so stats survive page refresh
+Files: dashboard/src/hooks/useWebSocket.ts
