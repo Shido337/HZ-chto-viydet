@@ -209,3 +209,7 @@ Files: scalper-ai/strategies/continuation_break.py, scalper-ai/strategies/early_
 ## [2026-04-05 22:36 UTC]
 PaperTrader: per-setup hold caps CB=15min EM=6min MR=8min (was flat 6min for all)
 Files: scalper-ai/core/paper_trader.py
+
+## [2026-04-05 23:06 UTC]
+CB: SWING_LOOKBACK 8->15 (45min structure), BODY_MIN_PCT 0.1%->0.4%, BREAK_CLEARANCE_PCT 0.15% (no false tick-breaks)
+Files: scalper-ai/strategies/continuation_break.py

@@ -13,9 +13,10 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # ---------------------------------------------------------------------------
 # Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
-SWING_LOOKBACK = 8             # swing detection window (3m candles)
+SWING_LOOKBACK = 15            # swing detection window (3m candles) — 45 min structure
 BREAK_LOOKBACK = 10            # scan last 10 3m candles (~30 min) for a prior break
-BODY_MIN_PCT = 0.001           # 0.1% min body on break candle (filter noise; was 0.03%)
+BODY_MIN_PCT = 0.004           # 0.4% min body on break candle — filters noise (was 0.1%)
+BREAK_CLEARANCE_PCT = 0.0015   # break candle must close 0.15% beyond swing (not just a tick)
 RETEST_PROXIMITY_PCT = 0.006   # price within 0.6% of level = retest zone
 RETEST_OVERSHOOT_PCT = 0.002   # allow up to 0.2% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
@@ -98,11 +99,17 @@ class ContinuationBreak(BaseStrategy):
             if body_pct < BODY_MIN_PCT:
                 continue
             if c["c"] > swing_h and c["c"] > c["o"]:
+                # Must close clearly beyond swing, not just a tick above
+                if (c["c"] - swing_h) / swing_h < BREAK_CLEARANCE_PCT:
+                    continue
                 direction = Direction.LONG
                 broken_level = swing_h
                 break_idx = i
                 break  # take first break
             if c["c"] < swing_l and c["c"] < c["o"]:
+                # Must close clearly beyond swing, not just a tick below
+                if (swing_l - c["c"]) / swing_l < BREAK_CLEARANCE_PCT:
+                    continue
                 direction = Direction.SHORT
                 broken_level = swing_l
                 break_idx = i
