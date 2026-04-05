@@ -133,3 +133,8 @@ Files: dashboard/src/components/CandleChart.tsx
 ## [2026-04-04 23:53 UTC]
 Fix chart v3: render directly from REST fetch (no store round-trip), guard incremental updates via loadedKeyRef, autoSize:true
 Files: dashboard/src/components/CandleChart.tsx
+
+## [2026-04-05 00:03 UTC]
+fix: chart explicit dims+ResizeObserver; CB lookback 10/prox 0.6%; update bot_engine CB diag
+Files: dashboard/src/components/CandleChart.tsx, core/bot_engine.py, strategies/continuation_break.py
+

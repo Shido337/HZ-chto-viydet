@@ -300,37 +300,51 @@ class BotEngine:
             adx_val = snap.indicators.adx
             ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
 
-            # ContinuationBreak diagnosis (TRENDING)
+            # ContinuationBreak diagnosis (TRENDING) — mirrors _detect_break_and_retest
             if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
+                from strategies.continuation_break import (
+                    SWING_LOOKBACK as _CB_SWING,
+                    BREAK_LOOKBACK as _CB_BREAK,
+                    BODY_MIN_PCT as _CB_BODY,
+                    RETEST_PROXIMITY_PCT as _CB_PROX,
+                    RETEST_OVERSHOOT_PCT as _CB_OVER,
+                )
                 candles_3m = list(snap.klines_3m)
                 reason = "CB: "
-                if len(candles_3m) < 12:
-                    reason += "need 12+ 3m candles"
+                min_c = _CB_SWING + _CB_BREAK + 1
+                if len(candles_3m) < min_c:
+                    reason += f"need {min_c}+ 3m candles (have {len(candles_3m)})"
                 else:
-                    last = candles_3m[-1]
-                    body_pct = abs(last["c"] - last["o"]) / last["o"] if last["o"] else 0
-                    swing_h = detect_swing_high(candles_3m[:-1], 5)
-                    swing_l = detect_swing_low(candles_3m[:-1], 5)
-                    broke_h = last["c"] > swing_h and last["c"] > last["o"]
-                    broke_l = last["c"] < swing_l and last["c"] < last["o"]
-                    candles_1m = list(snap.klines_1m)
-                    vol_ratio = volume_spike_ratio(candles_1m) if len(candles_1m) > 2 else 0
-                    if body_pct < 0.0002:
-                        reason += f"body={body_pct:.4f}<0.0002"
-                    elif not broke_h and not broke_l:
-                        reason += f"no brk (c={last['c']:.6f} H={swing_h:.6f} L={swing_l:.6f})"
-                    elif snap.cvd_delta_1m == 0:
-                        reason += "cvd=0"
-                    elif ob < 0.55 and (1 - ob) < 0.55:
-                        reason += f"ob={ob:.2f}<0.55"
+                    prefix = candles_3m[:-_CB_BREAK]
+                    swing_h = detect_swing_high(prefix, _CB_SWING)
+                    swing_l = detect_swing_low(prefix, _CB_SWING)
+                    brk_dir: str | None = None
+                    brk_lvl = 0.0
+                    for i in range(len(candles_3m) - _CB_BREAK, len(candles_3m)):
+                        c = candles_3m[i]
+                        bp = abs(c["c"] - c["o"]) / c["o"] if c["o"] else 0
+                        if bp < _CB_BODY:
+                            continue
+                        if c["c"] > swing_h and c["c"] > c["o"]:
+                            brk_dir, brk_lvl = "LONG", swing_h
+                            break
+                        if c["c"] < swing_l and c["c"] < c["o"]:
+                            brk_dir, brk_lvl = "SHORT", swing_l
+                            break
+                    if brk_dir is None:
+                        reason += f"no brk (H={swing_h:.5f} L={swing_l:.5f} p={snap.price:.5f})"
                     else:
-                        if len(candles_1m) >= 3:
-                            recent = candles_1m[-2:]
-                            greens = sum(1 for c in recent if c["c"] > c["o"])
-                            reds = sum(1 for c in recent if c["c"] < c["o"])
-                            reason += f"mom g={greens} r={reds} vol={vol_ratio:.2f}"
+                        price = snap.price
+                        if brk_dir == "LONG":
+                            dist = (price - brk_lvl) / brk_lvl
                         else:
-                            reason += "need 3+ 1m candles"
+                            dist = (brk_lvl - price) / brk_lvl
+                        if dist < -_CB_OVER:
+                            reason += f"{brk_dir} brk={brk_lvl:.5f} overshoot dist={dist*100:.2f}%"
+                        elif dist > _CB_PROX:
+                            reason += f"{brk_dir} brk={brk_lvl:.5f} no retest yet dist={dist*100:.2f}%"
+                        else:
+                            reason += f"{brk_dir} brk={brk_lvl:.5f} RETEST dist={dist*100:.2f}% → cvd={snap.cvd_delta_1m:.0f} ob={ob:.2f}"
                 logger.info(f"[DIAG] {symbol} {reason}")
 
             # EarlyMomentum diagnosis (ADX 18-30)

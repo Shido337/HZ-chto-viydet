@@ -33,19 +33,33 @@ export const CandleChart: React.FC = () => {
   // ── 1. Create chart once ────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
+    const w = containerRef.current.clientWidth  || 600;
+    const h = containerRef.current.clientHeight || 400;
     const chart = createChart(containerRef.current, {
       layout: { background: { color: '#0a0a1a' }, textColor: '#8888aa' },
       grid: { vertLines: { color: '#1a1a3a' }, horzLines: { color: '#1a1a3a' } },
       crosshair: { mode: 0 },
       timeScale: { timeVisible: true, secondsVisible: false },
-      autoSize: true,
+      width: w,
+      height: h,
     });
     const series = chart.addCandlestickSeries(CANDLE_OPTS);
     chartRef.current  = chart;
     seriesRef.current = series;
     loadedKeyRef.current = '';
 
+    const ro = new ResizeObserver(([entry]) => {
+      if (chartRef.current) {
+        chartRef.current.applyOptions({
+          width:  entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+    ro.observe(containerRef.current);
+
     return () => {
+      ro.disconnect();
       chart.remove();
       chartRef.current  = null;
       seriesRef.current = null;

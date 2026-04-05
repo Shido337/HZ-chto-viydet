@@ -14,10 +14,10 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # Fixed structural constants (NOT volatility-dependent)
 # ---------------------------------------------------------------------------
 SWING_LOOKBACK = 8             # swing detection window (3m candles)
-BREAK_LOOKBACK = 5             # scan last 5 3m candles for a prior break
+BREAK_LOOKBACK = 10            # scan last 10 3m candles (~30 min) for a prior break
 BODY_MIN_PCT = 0.0003          # 0.03% min body on break candle (filter noise)
-RETEST_PROXIMITY_PCT = 0.004   # price within 0.4% of level = retest zone
-RETEST_OVERSHOOT_PCT = 0.001   # allow up to 0.1% past level (wick through OK)
+RETEST_PROXIMITY_PCT = 0.006   # price within 0.6% of level = retest zone
+RETEST_OVERSHOOT_PCT = 0.002   # allow up to 0.2% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
 MIN_RR = 0.5                   # minimum 0.5:1 — trailing compensates
 # Adaptive constants come from snap.adaptive:
