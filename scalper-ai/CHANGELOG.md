@@ -1,5 +1,18 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-06 02:30 UTC]
+CB: BREAK_CLEARANCE_PCT 0.15%→0.05% — fix over-filtering of legitimate breaks
+Root cause of missed BCH trade: DIAG showed "RETEST ob=0.88-0.95" for 7+ minutes
+(01:53-02:04) but strategy silently rejected due to clearance check.
+A break candle with body=0.55% (passes BODY_MIN_PCT=0.4%) that starts far below swing
+can clear only 0.08-0.13% past it — was rejected by 0.15% threshold.
+With BODY_MIN_PCT=0.4% in place, BODY is the real quality gate.
+BREAK_CLEARANCE_PCT=0.15% was redundant AND over-restrictive.
+Reduced to 0.05% (anti-degenerate only: prevents close=exact swing edge case).
+Also fixed DIAG in bot_engine.py to include clearance check — previously DIAG
+showed "RETEST" even when strategy was silently rejecting the break.
+Files: strategies/continuation_break.py, core/bot_engine.py
+
 ## [2026-04-06 02:13 UTC]
 CoinScreener: fix coin selection for real scalping quality
 Problems found: 4-6 pump-and-dump coins (20-25% daily move) dominating watchlist

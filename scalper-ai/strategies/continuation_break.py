@@ -16,7 +16,9 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 SWING_LOOKBACK = 15            # swing detection window (3m candles) — 45 min structure
 BREAK_LOOKBACK = 10            # scan last 10 3m candles (~30 min) for a prior break
 BODY_MIN_PCT = 0.004           # 0.4% min body on break candle — filters noise (was 0.1%)
-BREAK_CLEARANCE_PCT = 0.0015   # break candle must close 0.15% beyond swing (not just a tick)
+BREAK_CLEARANCE_PCT = 0.0005   # break candle must close 0.05% beyond swing — BODY_MIN_PCT=0.4% is the real gate;
+                               # 0.15% was over-filtering: large-body candles starting below swing had
+                               # clearance 0.08-0.13% despite being real breaks (BCH missed trade 02:05)
 RETEST_PROXIMITY_PCT = 0.006   # price within 0.6% of level = retest zone
 RETEST_OVERSHOOT_PCT = 0.002   # allow up to 0.2% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL

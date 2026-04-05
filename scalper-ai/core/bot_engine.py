@@ -311,6 +311,7 @@ class BotEngine:
                     SWING_LOOKBACK as _CB_SWING,
                     BREAK_LOOKBACK as _CB_BREAK,
                     BODY_MIN_PCT as _CB_BODY,
+                    BREAK_CLEARANCE_PCT as _CB_CLEAR,
                     RETEST_PROXIMITY_PCT as _CB_PROX,
                     RETEST_OVERSHOOT_PCT as _CB_OVER,
                 )
@@ -331,9 +332,13 @@ class BotEngine:
                         if bp < _CB_BODY:
                             continue
                         if c["c"] > swing_h and c["c"] > c["o"]:
+                            if (c["c"] - swing_h) / swing_h < _CB_CLEAR:
+                                continue
                             brk_dir, brk_lvl = "LONG", swing_h
                             break
                         if c["c"] < swing_l and c["c"] < c["o"]:
+                            if (swing_l - c["c"]) / swing_l < _CB_CLEAR:
+                                continue
                             brk_dir, brk_lvl = "SHORT", swing_l
                             break
                     if brk_dir is None:
