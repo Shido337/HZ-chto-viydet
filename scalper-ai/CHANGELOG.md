@@ -1,5 +1,22 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-06 02:13 UTC]
+CoinScreener: fix coin selection for real scalping quality
+Problems found: 4-6 pump-and-dump coins (20-25% daily move) dominating watchlist
+every cycle (STOUSDT, BRUSDT, RLSUSDT, NOMUSDT); these have no retest structure,
+ADX 50-70+ blocks CB, MR impossible on trending coins; top liquid alts excluded
+for wrong reasons ("too slow" — false at 25x leverage).
+Changes:
+1. MAX_PRICE_CHANGE_PCT: 30% → 12% — removes pump-and-dump coins
+2. MIN_QUOTE_VOLUME_24H: $50M → $100M — removes micro-cap noise (unreliable OB)
+3. MIN_TRADE_COUNT_24H: 100k → 150k — better microstructure signal quality
+4. MAX_SYMBOLS: 12 → 10 — quality over quantity
+5. EXCLUDED_SYMBOLS: removed SOLUSDT, DOGEUSDT, XRPUSDT, LINKUSDT — these have
+   $500M-$5B volume, tight spreads, real swing structure, suit all 3 strategies
+6. vol_score cap: $500M → $1B — better differentiation of major alts vs mid-caps
+Result: 8 quality coins selected (vs 12 with 4+ pumps), pump coins eliminated
+Files: core/coin_screener.py
+
 ## [2026-04-05 01:30 UTC]
 EM market entry — limit orders incompatible with momentum setups:
 1. EM now enters at market (ask for LONG, bid for SHORT) — instant fill
@@ -155,7 +172,7 @@ Files: core/bot_engine.py, strategies/mean_reversion.py, core/paper_trader.py
 
 
 ## [2026-04-05 08:14 UTC]
-CB fix: SL hard cap 0.8%, ADX<=40, rejection candle, MIN_RR 1.5, BODY_MIN 0.1% � re-enable CB
+CB fix: SL hard cap 0.8%, ADX<=40, rejection candle, MIN_RR 1.5, BODY_MIN 0.1% � re-enable CB
 Files: strategies/continuation_break.py, core/bot_engine.py
 
 ## [2026-04-05 08:19 UTC]

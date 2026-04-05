@@ -8,21 +8,21 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # Screening thresholds
 # ---------------------------------------------------------------------------
-MIN_QUOTE_VOLUME_24H = 50_000_000.0    # $50M min 24h USDT volume
+MIN_QUOTE_VOLUME_24H = 100_000_000.0   # $100M min 24h USDT volume (was $50M — micro-caps have unreliable OB)
 MAX_SPREAD_PCT = 0.0005                  # 0.05% max bid-ask spread
-MIN_PRICE_CHANGE_PCT = 1.0              # min 1% daily move (abs)
-MAX_PRICE_CHANGE_PCT = 30.0             # max 30% daily move (abs)
-MIN_TRADE_COUNT_24H = 100_000           # min 100k trades in 24h
-MAX_SYMBOLS = 12                        # top N to select
+MIN_PRICE_CHANGE_PCT = 1.5              # min 1.5% daily move (abs) — filters dead coins
+MAX_PRICE_CHANGE_PCT = 12.0             # max 12% daily move (was 30% — kills pump-and-dump coins)
+MIN_TRADE_COUNT_24H = 150_000           # min 150k trades in 24h (was 100k — better microstructure)
+MAX_SYMBOLS = 10                        # top N to select (was 12 — quality > quantity)
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
 
-# Coins to always exclude (stablecoins, illiquid wrappers)
+# Coins to always exclude (stablecoins, true mega-caps that barely move at 25x)
+# SOL, DOGE, XRP, LINK are INCLUDED — they have $500M-$5B volume, tight spreads,
+# and real swing structure. At 25x leverage, SOL's 0.5% move = 12.5% return.
 EXCLUDED_SYMBOLS: set[str] = {
-    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-    "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT",
+    "BTCUSDT", "ETHUSDT", "BNBUSDT",
+    "ADAUSDT", "AVAXUSDT", "DOTUSDT",
 }
-# Note: we exclude top-cap coins because they move too slowly for
-# micro-scalping on $50 positions. We want volatile altcoins.
 
 
 @dataclass
@@ -101,7 +101,7 @@ class CoinScreener:
 
             # --- composite score (higher = better for scalping) ---
             # Normalize each component to 0-1 range then weight
-            vol_score = min(quote_volume / 500_000_000.0, 1.0)  # cap at $500M
+            vol_score = min(quote_volume / 1_000_000_000.0, 1.0)  # cap at $1B (was $500M — SOL/DOGE reach $2-5B)
             spread_score = 1.0 - (spread_pct / MAX_SPREAD_PCT)  # tighter = better
             vol_score_change = min(price_change_pct / 15.0, 1.0)  # cap at 15%
             trade_score = min(trade_count / 1_000_000, 1.0)  # cap at 1M trades
