@@ -205,3 +205,7 @@ Files: scalper-ai/dashboard/src/components/CandleChart.tsx
 ## [2026-04-05 21:49 UTC]
 Strategies OFCS calibration: CB retest-entry architecture confirmed; EM proximity 0.1%, CVD 3-bar buildup, OB 65%; MR sweep range 0.05-0.30%%, CVD absorption + OB flip detection
 Files: scalper-ai/strategies/continuation_break.py, scalper-ai/strategies/early_momentum.py, scalper-ai/strategies/mean_reversion.py
+
+## [2026-04-05 22:36 UTC]
+PaperTrader: per-setup hold caps CB=15min EM=6min MR=8min (was flat 6min for all)
+Files: scalper-ai/core/paper_trader.py

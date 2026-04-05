@@ -18,7 +18,11 @@ TRAILING_ACTIVATION_RR = 0.5  # fallback: activate trailing at 0.5× risk
 TRAILING_RISK_FACTOR = 0.4    # fallback: trail distance = 40% of original risk
 MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
 BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
-MAX_HOLD_MINUTES = 6          # hard cap for losing trades that aren't moving
+MAX_HOLD_MINUTES = 6          # default hard cap for losing trades that aren't moving
+# Per-setup hold caps: CB needs time to consolidate at retest before continuation
+MAX_HOLD_CB = 15              # CB retest can consolidate 10-15 min before breakout
+MAX_HOLD_EM = 6               # EM is momentum — must fire quickly or bail
+MAX_HOLD_MR = 8               # MR sweep fade — medium window
 STALE_EXIT_MINUTES = 4        # early exit for deep losers (>0.5% drawdown)
 STALE_EXIT_DRAWDOWN = 0.005   # 0.5% unrealized loss threshold for stale exit
 LEVERAGE = 25
@@ -325,7 +329,14 @@ class PaperTrader:
                 if not is_long and snap.cvd_delta_1m > 0:
                     return ("cvd_divergence", price)
         # Time stop — only for losing positions. Winners exit via trailing/cvd/TP.
-        if not in_profit and elapsed_min >= MAX_HOLD_MINUTES:
+        # Per-setup hold cap: CB gets more time (retest consolidation is normal)
+        if pos.setup_type == SetupType.CONTINUATION_BREAK:
+            hold_cap = MAX_HOLD_CB
+        elif pos.setup_type == SetupType.EARLY_MOMENTUM:
+            hold_cap = MAX_HOLD_EM
+        else:
+            hold_cap = MAX_HOLD_MR
+        if not in_profit and elapsed_min >= hold_cap:
             return ("time_stop", price)
         return None
 
