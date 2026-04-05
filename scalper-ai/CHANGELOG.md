@@ -148,3 +148,8 @@ Files: core/bot_engine.py
 fix: CandleChart v4 - decouple fetch/render via state, eliminate async ref-check race
 Files: dashboard/src/components/CandleChart.tsx
 
+
+## [2026-04-05 00:24 UTC]
+fix: disable CB (WR=23% -$7.41 over 53 trades); MR min SL 1xATR/0.3% floor; stale_exit 8min/0.5%
+Files: core/bot_engine.py, strategies/mean_reversion.py, core/paper_trader.py
+

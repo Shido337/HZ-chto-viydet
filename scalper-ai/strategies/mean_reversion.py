@@ -118,7 +118,8 @@ class MeanReversion(BaseStrategy):
             return None
 
         max_sl_dist = atr_val * ap.max_sl_atr
-        min_sl_dist = atr_val * ap.min_sl_atr
+        # MR needs room to breathe: at least 1×ATR or 0.3% of price
+        min_sl_dist = max(atr_val * 1.0, snap.price * 0.003)
 
         # Entry at retracement into sweep zone, SL beyond sweep extreme
         entry = swing_level + (sweep_extreme - swing_level) * ENTRY_RETRACEMENT
