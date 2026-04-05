@@ -65,6 +65,18 @@ class AdaptiveParams:
     ob_min: float = 0.55
     # ATR value for this symbol (absolute, for calculations)
     atr_value: float = 0.0
+    # --- Entry filters (ATR-percentile driven) ---
+    # CB: max ADX for clean retest
+    cb_adx_max: float = 50.0
+    # EM: ADX window for transitioning regime
+    em_adx_low: float = 15.0
+    em_adx_high: float = 35.0
+    # EM: ATR compression percentile ceiling
+    em_atr_compression_pct: float = 60.0
+    # EM: consecutive 1m candles for CVD buildup
+    em_cvd_bars: int = 2
+    # MR: 1m candle window for sweep detection
+    mr_sweep_window: int = 5
 
 
 @dataclass(frozen=True)

@@ -11,16 +11,13 @@ from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy, MIN_SCORE
 
 # ---------------------------------------------------------------------------
-# Fixed structural constants (NOT volatility-dependent)
+# Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
-ADX_LOW = 15.0
-ADX_HIGH = 35.0
-ATR_COMPRESSION_PCT = 70.0   # bottom 70th percentile
-CVD_CONSECUTIVE_BARS = 2     # 2+ bars building
 PRICE_NEAR_LEVEL_PCT = 0.008 # 0.8% of level
 MIN_RR = 0.5                 # minimum 0.5:1 — trailing compensates
 TREND_EMA_BARS = 20          # 5m EMA for trend alignment
-# Adaptive constants come from snap.adaptive:
+# Adaptive entry constants come from snap.adaptive:
+#   em_adx_low, em_adx_high, em_atr_compression_pct, em_cvd_bars,
 #   ob_min, min_score, tp_rr, max_sl_atr, min_sl_atr, atr_value
 
 
@@ -32,8 +29,9 @@ class EarlyMomentum(BaseStrategy):
     ) -> Signal | None:
         if snap.stale or not snap.price:
             return None
+        ap = snap.adaptive
         adx_val = snap.indicators.adx
-        if not (ADX_LOW <= adx_val <= ADX_HIGH):
+        if not (ap.em_adx_low <= adx_val <= ap.em_adx_high):
             return None
         if not self._check_atr_compression(snap):
             return None
@@ -53,13 +51,14 @@ class EarlyMomentum(BaseStrategy):
         if len(candles_5m) < 16:
             return False
         pct = calc_atr_pct(candles_5m, 14, 576)
-        return pct < ATR_COMPRESSION_PCT
+        return pct < snap.adaptive.em_atr_compression_pct
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:
+        n_bars = snap.adaptive.em_cvd_bars
         candles_1m = list(snap.klines_1m)
-        if len(candles_1m) < CVD_CONSECUTIVE_BARS + 1:
+        if len(candles_1m) < n_bars + 1:
             return None
-        recent = candles_1m[-CVD_CONSECUTIVE_BARS:]
+        recent = candles_1m[-n_bars:]
         all_up = all(c["c"] > c["o"] for c in recent)
         all_down = all(c["c"] < c["o"] for c in recent)
         if all_up and snap.cvd_delta_1m > 0:
@@ -123,7 +122,7 @@ class EarlyMomentum(BaseStrategy):
             cvd_alignment=min(cvd_usd / 5000, 1.0) * 0.25,
             ob_imbalance=(ob if d == Direction.LONG else 1 - ob) * 0.20,
             volume_confirmation=0.10,
-            structure_quality=min((ATR_COMPRESSION_PCT - atr_pct) / 20, 1.0) * 0.15,
+            structure_quality=min((ap.em_atr_compression_pct - atr_pct) / 20, 1.0) * 0.15,
             regime_match=0.12,
             ml_boost=min(ml_boost, 0.10),
         )

@@ -11,7 +11,7 @@ from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy, MIN_SCORE
 
 # ---------------------------------------------------------------------------
-# Fixed structural constants (NOT volatility-dependent)
+# Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
 SWING_LOOKBACK = 8             # swing detection window (3m candles)
 BREAK_LOOKBACK = 10            # scan last 10 3m candles (~30 min) for a prior break
@@ -21,9 +21,8 @@ RETEST_OVERSHOOT_PCT = 0.002   # allow up to 0.2% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
 MIN_RR = 1.5                   # minimum 1.5:1 (was 0.5 — too loose)
 MAX_SL_PCT = 0.008             # 0.8% hard cap: kills catastrophic swing-to-swing SLs
-ADX_MAX = 55.0                 # skip runaway trends (ADX>55) — no clean retest
-# Adaptive constants come from snap.adaptive:
-#   ob_min, volume_spike_min, min_score, tp_rr,
+# Adaptive entry constants come from snap.adaptive:
+#   cb_adx_max, ob_min, volume_spike_min, min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
 
 
@@ -47,7 +46,7 @@ class ContinuationBreak(BaseStrategy):
         if snap.regime not in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
             return None
         # Skip runaway trends — very high ADX means price rarely retests cleanly
-        if snap.indicators.adx > ADX_MAX:
+        if snap.indicators.adx > snap.adaptive.cb_adx_max:
             return None
         result = self._detect_break_and_retest(snap)
         if result is None:

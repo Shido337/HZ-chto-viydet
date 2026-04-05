@@ -11,7 +11,7 @@ from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy, MIN_SCORE
 
 # ---------------------------------------------------------------------------
-# Fixed structural constants (NOT volatility-dependent)
+# Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
 SWEEP_MIN_PCT = 0.0002    # 0.02% beyond swing
 SWEEP_MAX_PCT = 0.0080    # 0.80% beyond swing
@@ -19,10 +19,9 @@ VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP
 SL_BUFFER_PCT = 0.0005    # 0.05% beyond sweep extreme
 ENTRY_RETRACEMENT = 0.5   # enter at 50% of sweep_extreme→swing_level range
 MIN_RR = 0.5              # minimum 0.5:1 — trailing compensates
-SWEEP_WINDOW = 5          # check last 5 1m candles for a sweep (was 3)
 CVD_NORM_MR = 1500.0      # CVD normalizer: ranging markets have lower abs CVD (was 5000)
-# Adaptive constants come from snap.adaptive:
-#   ob_min (as flip threshold), min_score, tp_rr,
+# Adaptive entry constants come from snap.adaptive:
+#   mr_sweep_window, ob_min (as flip threshold), min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
 
 
@@ -62,7 +61,8 @@ class MeanReversion(BaseStrategy):
             return None
 
         ob_flip = snap.adaptive.ob_min
-        for c in candles_1m[-SWEEP_WINDOW:]:
+        sweep_window = snap.adaptive.mr_sweep_window
+        for c in candles_1m[-sweep_window:]:
             if c["h"] > swing_h:
                 sweep_pct = (c["h"] - swing_h) / swing_h
                 if SWEEP_MIN_PCT <= sweep_pct <= SWEEP_MAX_PCT:

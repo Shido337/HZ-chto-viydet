@@ -374,8 +374,9 @@ class BotEngine:
                             reason += f"{brk_dir} brk={brk_lvl:.5f} RETEST dist={dist*100:.2f}% → cvd={snap.cvd_delta_1m:.0f} ob={ob:.2f}"
                 logger.info(f"[DIAG] {symbol} {reason}")
 
-            # EarlyMomentum diagnosis (ADX 18-30)
-            if 18.0 <= adx_val <= 30.0:
+            # EarlyMomentum diagnosis (adaptive ADX window)
+            ap = snap.adaptive
+            if ap.em_adx_low <= adx_val <= ap.em_adx_high:
                 candles_5m = list(snap.klines_5m)
                 reason = "EM: "
                 if len(candles_5m) < 16:
@@ -383,10 +384,11 @@ class BotEngine:
                 else:
                     atr_pct = calc_atr_pct(candles_5m, 14, 576)
                     candles_1m = list(snap.klines_1m)
-                    if atr_pct >= 55.0:
-                        reason += f"atr_pct={atr_pct:.1f}>=55"
-                    elif len(candles_1m) < 3:
-                        reason += "need 3+ 1m candles"
+                    n_bars = ap.em_cvd_bars
+                    if atr_pct >= ap.em_atr_compression_pct:
+                        reason += f"atr_pct={atr_pct:.1f}>={ap.em_atr_compression_pct:.0f}"
+                    elif len(candles_1m) < n_bars:
+                        reason += f"need {n_bars}+ 1m candles"
                     else:
                         recent = candles_1m[-1:]
                         all_up = all(c["c"] > c["o"] for c in recent)
@@ -416,11 +418,11 @@ class BotEngine:
                     sw_l = detect_swing_low(candles_1m[:-1], 5)
                     swept_h = any(
                         c["h"] > sw_h and c["c"] < sw_h
-                        for c in candles_1m[-3:]
+                        for c in candles_1m[-snap.adaptive.mr_sweep_window:]
                     )
                     swept_l = any(
                         c["l"] < sw_l and c["c"] > sw_l
-                        for c in candles_1m[-3:]
+                        for c in candles_1m[-snap.adaptive.mr_sweep_window:]
                     )
                     reason += (
                         f"swept_h={swept_h} swept_l={swept_l} "
@@ -617,6 +619,24 @@ class BotEngine:
         score_delta = max(adjustments) if adjustments else 0.0
         min_score = max(0.50, min(0.80, base_score + score_delta))
 
+        # --- Entry filters (ATR-percentile driven) ---
+        # atr_pct 0 = dead quiet, 100 = extreme volatility
+        # Quiet market  → relax entry filters (wider ADX, looser compression)
+        # Active market → tighten (narrow ADX, strict compression, more CVD bars)
+        #
+        # CB: adx_max — higher in quiet markets (accept weaker trends), lower in active
+        cb_adx_max = 40.0 + (100.0 - atr_pct) * 0.3   # range ~40–70
+        # EM: ADX window widens in quiet markets, narrows in active
+        em_adx_low = 12.0 + atr_pct * 0.08              # range ~12–20
+        em_adx_high = 40.0 - atr_pct * 0.10             # range ~30–40
+        em_adx_high = max(em_adx_high, em_adx_low + 5)  # ensure window >= 5
+        # EM: ATR compression — quiet markets accept higher pct, active need genuine compression
+        em_atr_compression = 80.0 - atr_pct * 0.30      # range ~50–80
+        # EM: CVD buildup bars — active markets need more confirmation
+        em_cvd_bars = 2 if atr_pct < 50 else 3
+        # MR: sweep window — quiet markets need wider window to catch sweeps
+        mr_sweep_window = 7 if atr_pct < 30 else (5 if atr_pct < 70 else 4)
+
         params = AdaptiveParams(
             max_sl_atr=max_sl,
             min_sl_atr=min_sl,
@@ -628,6 +648,12 @@ class BotEngine:
             volume_spike_min=vol_spike_min,
             ob_min=ob_min,
             atr_value=atr_val,
+            cb_adx_max=cb_adx_max,
+            em_adx_low=em_adx_low,
+            em_adx_high=em_adx_high,
+            em_atr_compression_pct=em_atr_compression,
+            em_cvd_bars=em_cvd_bars,
+            mr_sweep_window=mr_sweep_window,
         )
         await self.cache.update_adaptive(symbol, params)
 

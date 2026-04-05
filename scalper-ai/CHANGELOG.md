@@ -185,3 +185,7 @@ Files: scalper-ai/core/bot_engine.py, scalper-ai/dashboard/src/hooks/useWebSocke
 ## [2026-04-05 11:42 UTC]
 Relax strategy filters to fix signal starvation: CB ADX_MAX 40->55, EM ADX range 18-30->15-35, EM CVD bars 3->2, EM ATR compression 55->70
 Files: strategies/continuation_break.py, strategies/early_momentum.py
+
+## [2026-04-05 12:08 UTC]
+Adaptive entry filters: move hardcoded ADX/ATR/CVD/sweep thresholds into AdaptiveParams, computed from atr_pct every 30s. Quiet market relaxes filters, active market tightens.
+Files: data/cache.py, core/bot_engine.py, strategies/continuation_break.py, strategies/early_momentum.py, strategies/mean_reversion.py
