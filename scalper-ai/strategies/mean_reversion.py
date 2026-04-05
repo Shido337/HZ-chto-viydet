@@ -13,13 +13,14 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # ---------------------------------------------------------------------------
 # Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
-SWEEP_MIN_PCT = 0.0002    # 0.02% beyond swing
-SWEEP_MAX_PCT = 0.0080    # 0.80% beyond swing
-VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP
+SWEEP_MIN_PCT = 0.0005    # 0.05% beyond swing — per OFCS spec minimum
+SWEEP_MAX_PCT = 0.0030    # 0.30% beyond swing — per OFCS spec maximum (was 0.80%)
+VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP — per OFCS spec: ±1.5% VWAP
 SL_BUFFER_PCT = 0.0005    # 0.05% beyond sweep extreme
 ENTRY_RETRACEMENT = 0.5   # enter at 50% of sweep_extreme→swing_level range
 MIN_RR = 0.5              # minimum 0.5:1 — trailing compensates
-CVD_NORM_MR = 1500.0      # CVD normalizer: ranging markets have lower abs CVD (was 5000)
+CVD_NORM_MR = 1500.0      # CVD normalizer: ranging markets have lower abs CVD
+OB_FLIP_THRESHOLD = 0.55  # bid/ask flip: must be ≥55% opposite side (per OFCS spec)
 # Adaptive entry constants come from snap.adaptive:
 #   mr_sweep_window, ob_min (as flip threshold), min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
@@ -51,7 +52,16 @@ class MeanReversion(BaseStrategy):
     def _detect_sweep(
         self, snap: MarketSnapshot,
     ) -> tuple[Direction, float, float] | None:
-        """Detect liquidity sweep. Returns (direction, sweep_extreme, swing_level)."""
+        """Detect liquidity sweep with bid/ask flip confirmation.
+
+        Per OFCS spec:
+        - Price sweeps swing high/low by 0.05–0.30%
+        - Candle closes BACK inside the range (wick-only rejection)
+        - Bid/ask flip: was imbalanced toward sweep side, now ≥55% opposite
+        - CVD reversal: absorption pattern (CVD counter to sweep direction)
+
+        Returns (direction, sweep_extreme, swing_level) or None.
+        """
         candles_1m = list(snap.klines_1m)
         if len(candles_1m) < 8:
             return None
@@ -60,26 +70,37 @@ class MeanReversion(BaseStrategy):
         if swing_h == 0 or swing_l == 0:
             return None
 
-        ob_flip = snap.adaptive.ob_min
         sweep_window = snap.adaptive.mr_sweep_window
+        ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
+
         for c in candles_1m[-sweep_window:]:
+            # --- BEARISH SWEEP: swept above swing high, closed back below ---
             if c["h"] > swing_h:
                 sweep_pct = (c["h"] - swing_h) / swing_h
                 if SWEEP_MIN_PCT <= sweep_pct <= SWEEP_MAX_PCT:
-                    if c["c"] < swing_h:
-                        if snap.cvd_delta_1m < 0:
-                            ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-                            if ob < (1 - ob_flip):
-                                return (Direction.SHORT, c["h"], swing_h)
+                    if c["c"] < swing_h:  # closed back inside = wick rejection
+                        # Flip: OB must now be bid-heavy (≥55% ask side = selling pressure
+                        # absorbed, now flipping to bid)
+                        # Per spec: 'was imbalanced toward sweep side (ask), now flips ≥55% opposite (bid)'
+                        # Short entry: we fade the sweep up, so we need:
+                        # CVD reverting (absorption) AND OB showing asks dominant (selling)
+                        cvd_reversed = snap.cvd_delta_1m <= 0  # selling pressure / absorption
+                        ob_flipped = ob < (1 - OB_FLIP_THRESHOLD)  # ≥45% bid = 55% ask
+                        if cvd_reversed and ob_flipped:
+                            return (Direction.SHORT, c["h"], swing_h)
 
+            # --- BULLISH SWEEP: swept below swing low, closed back above ---
             if c["l"] < swing_l:
                 sweep_pct = (swing_l - c["l"]) / swing_l
                 if SWEEP_MIN_PCT <= sweep_pct <= SWEEP_MAX_PCT:
-                    if c["c"] > swing_l:
-                        if snap.cvd_delta_1m > 0:
-                            ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-                            if ob > ob_flip:
-                                return (Direction.LONG, c["l"], swing_l)
+                    if c["c"] > swing_l:  # closed back inside = wick rejection
+                        # Per spec: 'was imbalanced toward sweep side (bid/selling), now flips ≥55% opposite'
+                        # Long entry: we fade the sweep down, so we need:
+                        # CVD reverting (absorption) AND OB showing bids dominant (buying)
+                        cvd_reversed = snap.cvd_delta_1m >= 0  # buying pressure / absorption
+                        ob_flipped = ob > OB_FLIP_THRESHOLD  # ≥55% bid
+                        if cvd_reversed and ob_flipped:
+                            return (Direction.LONG, c["l"], swing_l)
         return None
 
     def _check_vwap(self, snap: MarketSnapshot) -> bool:
@@ -111,7 +132,7 @@ class MeanReversion(BaseStrategy):
             ob_imbalance=(ob if d == Direction.LONG else 1 - ob) * 0.20,
             volume_confirmation=sweep_quality * 0.15,       # deeper sweep = better
             structure_quality=sweep_quality * 0.15,         # dynamic, not fixed
-            regime_match=0.10,
+            regime_match=0.15,
             ml_boost=min(ml_boost, 0.10),
         )
         score = comp.total()

@@ -13,9 +13,11 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # ---------------------------------------------------------------------------
 # Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
-PRICE_NEAR_LEVEL_PCT = 0.008 # 0.8% of level
-MIN_RR = 0.5                 # minimum 0.5:1 — trailing compensates
-TREND_EMA_BARS = 20          # 5m EMA for trend alignment
+PRICE_NEAR_LEVEL_PCT = 0.001  # 0.10% of level — per OFCS spec: price coiling within 0.10%
+CVD_BUILDUP_BARS = 3          # min consecutive 1m bars with accumulating CVD (spec: 3+)
+OB_CONSISTENT_MIN = 0.65      # OB must be ≥65% consistent — per OFCS spec
+MIN_RR = 0.5                  # minimum 0.5:1 — trailing compensates
+TREND_EMA_BARS = 20           # 5m EMA for trend alignment
 # Adaptive entry constants come from snap.adaptive:
 #   em_adx_low, em_adx_high, em_atr_compression_pct, em_cvd_bars,
 #   ob_min, min_score, tp_rr, max_sl_atr, min_sl_atr, atr_value
@@ -54,17 +56,33 @@ class EarlyMomentum(BaseStrategy):
         return pct < snap.adaptive.em_atr_compression_pct
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:
-        n_bars = snap.adaptive.em_cvd_bars
+        """Detect CVD accumulation: 3+ consecutive 1m bars with net delta in same direction.
+
+        Per OFCS spec: 'CVD building: net positive/negative delta accumulating
+        3+ consecutive 1m bars'. This detects coiling/buildup, NOT a single impulse.
+        Uses closed candles only (skip live forming [-1]).
+        """
         candles_1m = list(snap.klines_1m)
-        if len(candles_1m) < n_bars + 1:
+        if len(candles_1m) < CVD_BUILDUP_BARS + 3:
             return None
-        recent = candles_1m[-n_bars:]
-        all_up = all(c["c"] > c["o"] for c in recent)
-        all_down = all(c["c"] < c["o"] for c in recent)
-        if all_up and snap.cvd_delta_1m > 0:
-            return Direction.LONG
-        if all_down and snap.cvd_delta_1m < 0:
-            return Direction.SHORT
+
+        # Examine the last CVD_BUILDUP_BARS closed candles (skip live [-1])
+        # Each candle's contribution to delta = sign of (close - open)
+        closed = candles_1m[-(CVD_BUILDUP_BARS + 1):-1]  # last N closed candles
+
+        # All must be in the same direction (consecutive accumulation)
+        closes_above_opens = [c["c"] > c["o"] for c in closed]
+        closes_below_opens = [c["c"] < c["o"] for c in closed]
+
+        if all(closes_above_opens):
+            # Bullish accumulation — confirm with current CVD direction
+            if snap.cvd_delta_1m > 0:
+                return Direction.LONG
+        elif all(closes_below_opens):
+            # Bearish accumulation — confirm with current CVD direction
+            if snap.cvd_delta_1m < 0:
+                return Direction.SHORT
+
         return None
 
     def _check_trend_alignment(
@@ -91,19 +109,25 @@ class EarlyMomentum(BaseStrategy):
     def _check_ob_and_level(
         self, snap: MarketSnapshot, d: Direction,
     ) -> bool:
+        """OB must be ≥65% consistent on one side (OFCS spec: consistent 65%+ for ≥90s).
+        Price must be within 0.10% of level (coiling near resistance/support).
+        """
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-        ob_min = snap.adaptive.ob_min
-        if d == Direction.LONG and ob < ob_min:
+        # Per spec: consistent bid/ask imbalance ≥65%+ on entry side
+        if d == Direction.LONG and ob < OB_CONSISTENT_MIN:
             return False
-        if d == Direction.SHORT and ob > (1 - ob_min):
+        if d == Direction.SHORT and ob > (1 - OB_CONSISTENT_MIN):
             return False
+
         candles_5m = list(snap.klines_5m)
         if len(candles_5m) < 10:
             return False
+        # LONG: price near swing LOW (support) — bounce up
+        # SHORT: price near swing HIGH (resistance) — drop down
         if d == Direction.LONG:
-            level = detect_swing_high(candles_5m, 10)
-        else:
             level = detect_swing_low(candles_5m, 10)
+        else:
+            level = detect_swing_high(candles_5m, 10)
         if level == 0:
             return False
         proximity = abs(snap.price - level) / level
@@ -121,9 +145,9 @@ class EarlyMomentum(BaseStrategy):
         comp = ScoreComponents(
             cvd_alignment=min(cvd_usd / 5000, 1.0) * 0.25,
             ob_imbalance=(ob if d == Direction.LONG else 1 - ob) * 0.20,
-            volume_confirmation=0.10,
+            volume_confirmation=0.15,
             structure_quality=min((ap.em_atr_compression_pct - atr_pct) / 20, 1.0) * 0.15,
-            regime_match=0.12,
+            regime_match=0.15,
             ml_boost=min(ml_boost, 0.10),
         )
         score = comp.total()

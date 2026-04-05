@@ -130,38 +130,41 @@ class ContinuationBreak(BaseStrategy):
         return direction, broken_level, break_idx
 
     def _check_flow(self, snap: MarketSnapshot, d: Direction) -> bool:
-        """CVD alignment + OB imbalance + volume — adaptive thresholds."""
+        """OB imbalance + volume at retest level.
+
+        CVD is intentionally NOT checked here: during a retest, price moves
+        counter to the break direction (that IS the retest), so the 1m CVD
+        will naturally point against the trade. The structural break already
+        establishes direction. OB shows whether the level is being defended.
+        """
         ap = snap.adaptive
-        # CVD in break direction
-        if d == Direction.LONG and snap.cvd_delta_1m <= 0:
-            return False
-        if d == Direction.SHORT and snap.cvd_delta_1m >= 0:
-            return False
-        # OB imbalance
+        # OB check — loose threshold only to catch extreme mismatches:
+        # During a retest the price counter-moves toward the level (low volume,
+        # mixed OB). Using tight thresholds here kills every retest. We only
+        # block obvious mismatches: e.g. LONG with 80% ask pressure.
+        # Volume is intentionally NOT checked: retest is a low-volume pullback
+        # by nature. The break candle already passed body_pct quality check.
+        CB_OB_MIN = 0.35
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-        if d == Direction.LONG and ob < ap.ob_min:
+        if d == Direction.LONG and ob < CB_OB_MIN:
             return False
-        if d == Direction.SHORT and ob > (1 - ap.ob_min):
-            return False
-        # Volume check
-        candles_1m = list(snap.klines_1m)
-        if len(candles_1m) < 5:
-            return False
-        if volume_spike_ratio(candles_1m) < ap.volume_spike_min:
+        if d == Direction.SHORT and ob > (1 - CB_OB_MIN):
             return False
         return True
 
     def _check_rejection_candle(self, snap: MarketSnapshot, d: Direction) -> bool:
-        """Most recent 1m candle must show rejection at the retest level.
+        """Last CLOSED 1m candle must show rejection at the retest level.
 
         LONG retest: price should be bouncing — close in upper half of candle range.
         SHORT retest: price should be failing — close in lower half of candle range.
-        Filters out candles where price is still moving against us at the level.
+        Uses [-2] (closed candle), not [-1] (live forming candle), because during
+        an active retest the live candle moves toward the level and closes in the
+        wrong half, giving a false rejection signal.
         """
         candles = list(snap.klines_1m)
-        if not candles:
+        if len(candles) < 2:
             return False
-        cur = candles[-1]
+        cur = candles[-2]  # last confirmed closed candle
         h, l, c = cur["h"], cur["l"], cur["c"]
         candle_range = h - l
         if candle_range <= 0:
