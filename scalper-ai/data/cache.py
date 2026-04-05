@@ -20,6 +20,9 @@ class MarketRegime(str, Enum):
     HIGH_VOL = "HIGH_VOL"
 
 
+WALL_MULTIPLIER = 5.0  # a level is a "wall" when its qty >= 5x average of all 20 levels
+
+
 @dataclass(frozen=True)
 class BookTicker:
     bid: float = 0.0
@@ -27,6 +30,16 @@ class BookTicker:
     bid_qty: float = 0.0
     ask_qty: float = 0.0
     ts: float = 0.0
+
+
+@dataclass(frozen=True)
+class WallSnapshot:
+    """Detected wall levels at one point in time, built from @depth20 stream."""
+    ts: float = 0.0
+    bid_wall_price: float = 0.0
+    bid_wall_qty: float = 0.0
+    ask_wall_price: float = 0.0
+    ask_wall_qty: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -98,6 +111,9 @@ class MarketSnapshot:
     klines_3m: tuple[dict[str, Any], ...] = ()
     klines_5m: tuple[dict[str, Any], ...] = ()
     agg_trades: tuple[dict[str, Any], ...] = ()
+    depth_bids: tuple[tuple[float, float], ...] = ()   # (price, qty) top 20 bids from @depth20
+    depth_asks: tuple[tuple[float, float], ...] = ()   # (price, qty) top 20 asks from @depth20
+    wall_history: tuple[WallSnapshot, ...] = ()        # recent depth wall snapshots (300 × 100ms = 30s)
     stale: bool = False
     ts: float = 0.0
 
@@ -132,6 +148,10 @@ class MarketCache:
         self._cvd_at_1m_start: dict[str, float] = {}
         self._vol_at_1m_start: dict[str, float] = {}
         self._volume_accum: dict[str, float] = {}
+        # Depth (Level-2) data from @depth20 stream
+        self.depth_bids: dict[str, list[tuple[float, float]]] = {}
+        self.depth_asks: dict[str, list[tuple[float, float]]] = {}
+        self.wall_history: dict[str, deque[WallSnapshot]] = {}
 
     # -- bootstrap ----------------------------------------------------------
 
@@ -157,6 +177,9 @@ class MarketCache:
         self._cvd_at_1m_start[symbol] = 0.0
         self._vol_at_1m_start[symbol] = 0.0
         self._volume_accum[symbol] = 0.0
+        self.depth_bids[symbol] = []
+        self.depth_asks[symbol] = []
+        self.wall_history[symbol] = deque(maxlen=300)  # 300 × 100ms = 30s of wall history
 
     def _lock(self, symbol: str) -> asyncio.Lock:
         lock = self._locks.get(symbol)
@@ -166,6 +189,23 @@ class MarketCache:
         return lock
 
     # -- atomic writers -----------------------------------------------------
+
+    @staticmethod
+    def _detect_wall(
+        levels: list[tuple[float, float]], mult: float = WALL_MULTIPLIER,
+    ) -> tuple[float, float]:
+        """Returns (wall_price, wall_qty) or (0.0, 0.0) if no wall detected."""
+        if len(levels) < 5:
+            return 0.0, 0.0
+        qtys = [q for _, q in levels if q > 0]
+        if not qtys:
+            return 0.0, 0.0
+        avg = sum(qtys) / len(qtys)
+        best_p, best_q = 0.0, 0.0
+        for p, q in levels:
+            if q >= avg * mult and q > best_q:
+                best_p, best_q = p, q
+        return best_p, best_q
 
     def load_klines(
         self, symbol: str, tf: str, candles: list[dict[str, Any]],
@@ -196,6 +236,23 @@ class MarketCache:
                 ask_qty=ask_qty, ts=time.time(),
             )
             self._stale[symbol] = False
+
+    async def update_depth(
+        self, symbol: str,
+        bids: list[tuple[float, float]],
+        asks: list[tuple[float, float]],
+    ) -> None:
+        """Store depth snapshot and build wall history (from @depth20@100ms stream)."""
+        async with self._lock(symbol):
+            self.depth_bids[symbol] = bids
+            self.depth_asks[symbol] = asks
+            bp, bq = self._detect_wall(bids)
+            ap, aq = self._detect_wall(asks)
+            self.wall_history[symbol].append(WallSnapshot(
+                ts=time.time(),
+                bid_wall_price=bp, bid_wall_qty=bq,
+                ask_wall_price=ap, ask_wall_qty=aq,
+            ))
 
     async def update_agg_trade(
         self, symbol: str, trade: dict[str, Any],
@@ -264,6 +321,9 @@ class MarketCache:
             klines_3m=tuple(klines.get("3m", deque())),
             klines_5m=tuple(klines.get("5m", deque())),
             agg_trades=tuple(self.agg_trades.get(symbol, deque())),
+            depth_bids=tuple(self.depth_bids.get(symbol, [])),
+            depth_asks=tuple(self.depth_asks.get(symbol, [])),
+            wall_history=tuple(self.wall_history.get(symbol, deque())),
             stale=self._stale.get(symbol, False),
             ts=time.time(),
         )

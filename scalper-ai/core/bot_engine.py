@@ -21,6 +21,7 @@ from ml.online_learner import OnlineLearner
 from strategies.continuation_break import ContinuationBreak
 from strategies.early_momentum import EarlyMomentum
 from strategies.mean_reversion import MeanReversion
+from strategies.wall_bounce import WallBounce
 
 load_dotenv()
 
@@ -48,11 +49,13 @@ class BotEngine:
             ContinuationBreak(),
             MeanReversion(),
             EarlyMomentum(),
+            WallBounce(),
         ]
         self.strategy_enabled = {
             "CONTINUATION_BREAK": True,   # re-enabled: SL cap 0.8%, ADX≤40, rejection candle filter
             "MEAN_REVERSION": True,
             "EARLY_MOMENTUM": True,
+            "WALL_BOUNCE": True,
         }
 
         # Trader — paper by default, swappable
@@ -269,9 +272,9 @@ class BotEngine:
             setup = self._class_to_setup(name)
             if not self.strategy_enabled.get(setup, True):
                 continue
-            # LOW_VOL → MR only (no momentum in dead market)
+            # LOW_VOL → MR and WB only (no momentum in a dead market; walls are cleaner)
             if snap.regime == MarketRegime.LOW_VOL:
-                if setup != "MEAN_REVERSION":
+                if setup not in ("MEAN_REVERSION", "WALL_BOUNCE"):
                     continue
             boost = self.learner.predict_boost(setup, snap.symbol)
             sig = strategy.compute_signal(snap, boost)
@@ -413,7 +416,25 @@ class BotEngine:
                     )
                 logger.info(f"[DIAG] {symbol} {reason}")
 
-    # -- signal processing --------------------------------------------------
+            # WallBounce diagnosis (all regimes)
+            from data.indicators import find_wall, wall_absorption_pct
+            bid_wall = find_wall(snap.depth_bids)
+            ask_wall = find_wall(snap.depth_asks)
+            if bid_wall or ask_wall:
+                parts: list[str] = []
+                if bid_wall:
+                    bwp, bwq = bid_wall
+                    dist_b = (snap.price - bwp) / bwp * 100 if bwp else 0.0
+                    abs_b = wall_absorption_pct(snap.wall_history, bwp, "bid") * 100
+                    parts.append(f"bid={bwp:.4f} qty={bwq:.0f} dist={dist_b:.2f}% abs={abs_b:.0f}%")
+                if ask_wall:
+                    awp, awq = ask_wall
+                    dist_a = (awp - snap.price) / snap.price * 100 if snap.price else 0.0
+                    abs_a = wall_absorption_pct(snap.wall_history, awp, "ask") * 100
+                    parts.append(f"ask={awp:.4f} qty={awq:.0f} dist={dist_a:.2f}% abs={abs_a:.0f}%")
+                logger.info(f"[DIAG] {symbol} WB: {' | '.join(parts)} cvd={snap.cvd_delta_1m:.0f}")
+            else:
+                logger.info(f"[DIAG] {symbol} WB: depth_bids={len(snap.depth_bids)} asks={len(snap.depth_asks)} (no wall)")
 
     async def _process_signal(self, signal: Signal) -> None:
         snap = self.cache.get_snapshot(signal.symbol)
@@ -656,6 +677,7 @@ class BotEngine:
             self._ws.subscribe(f"{sl}@kline_5m", self._make_kline_handler(s, "5m"))
             self._ws.subscribe(f"{sl}@bookTicker", self._make_book_handler(s))
             self._ws.subscribe(f"{sl}@aggTrade", self._make_agg_handler(s))
+            self._ws.subscribe(f"{sl}@depth20@100ms", self._make_depth_handler(s))
         await self._ws.start()
 
     # -- dynamic coin screening ---------------------------------------------
@@ -768,6 +790,15 @@ class BotEngine:
             await self.cache.update_agg_trade(symbol, data)
         return handler
 
+    def _make_depth_handler(self, symbol: str) -> Any:
+        async def handler(data: dict[str, Any]) -> None:
+            raw_bids = data.get("bids") or data.get("b", [])
+            raw_asks = data.get("asks") or data.get("a", [])
+            bids = [(float(p), float(q)) for p, q in raw_bids if float(q) > 0]
+            asks = [(float(p), float(q)) for p, q in raw_asks if float(q) > 0]
+            await self.cache.update_depth(symbol, bids, asks)
+        return handler
+
     # -- helpers ------------------------------------------------------------
 
     @staticmethod
@@ -776,6 +807,7 @@ class BotEngine:
             "ContinuationBreak": "CONTINUATION_BREAK",
             "MeanReversion": "MEAN_REVERSION",
             "EarlyMomentum": "EARLY_MOMENTUM",
+            "WallBounce": "WALL_BOUNCE",
         }
         return mapping.get(cls_name, cls_name)
 

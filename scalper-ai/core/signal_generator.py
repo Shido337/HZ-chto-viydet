@@ -10,6 +10,7 @@ class SetupType(str, Enum):
     CONTINUATION_BREAK = "CONTINUATION_BREAK"
     MEAN_REVERSION = "MEAN_REVERSION"
     EARLY_MOMENTUM = "EARLY_MOMENTUM"
+    WALL_BOUNCE = "WALL_BOUNCE"
 
 
 class Direction(str, Enum):

@@ -23,6 +23,7 @@ MAX_HOLD_MINUTES = 6          # default hard cap for losing trades that aren't m
 MAX_HOLD_CB = 15              # CB retest can consolidate 10-15 min before breakout
 MAX_HOLD_EM = 6               # EM is momentum — must fire quickly or bail
 MAX_HOLD_MR = 8               # MR sweep fade — medium window
+MAX_HOLD_WB = 4               # WB wall edge is short-lived — exit fast
 STALE_EXIT_MINUTES = 4        # early exit for deep losers (>0.5% drawdown)
 STALE_EXIT_DRAWDOWN = 0.005   # 0.5% unrealized loss threshold for stale exit
 LEVERAGE = 25
@@ -64,7 +65,7 @@ class PaperTrader:
             return None
 
         snap = self.cache.get_snapshot(signal.symbol)
-        is_market = signal.setup_type == SetupType.EARLY_MOMENTUM
+        is_market = signal.setup_type in (SetupType.EARLY_MOMENTUM, SetupType.WALL_BOUNCE)
 
         if is_market:
             # Market entry: LONG at ask, SHORT at bid (taker)
@@ -334,6 +335,8 @@ class PaperTrader:
             hold_cap = MAX_HOLD_CB
         elif pos.setup_type == SetupType.EARLY_MOMENTUM:
             hold_cap = MAX_HOLD_EM
+        elif pos.setup_type == SetupType.WALL_BOUNCE:
+            hold_cap = MAX_HOLD_WB
         else:
             hold_cap = MAX_HOLD_MR
         if not in_profit and elapsed_min >= hold_cap:
@@ -350,7 +353,7 @@ class PaperTrader:
         else:
             pnl = (pos.entry_price - price) / pos.entry_price * pos.size_usdt
         # Entry: limit = maker, market (EM) = taker
-        is_market_entry = pos.setup_type == SetupType.EARLY_MOMENTUM
+        is_market_entry = pos.setup_type in (SetupType.EARLY_MOMENTUM, SetupType.WALL_BOUNCE)
         entry_fee = pos.size_usdt * (TAKER_FEE if is_market_entry else MAKER_FEE)
         # Exit: TP = limit (maker), rest = market (taker)
         if reason == "tp_hit":

@@ -213,3 +213,69 @@ def volume_spike_ratio(candles: list[dict[str, Any]], period: int = 20) -> float
     if avg == 0:
         return 0.0
     return current / avg
+
+
+# ---------------------------------------------------------------------------
+# Order-book wall helpers (for WallBounce strategy)
+# ---------------------------------------------------------------------------
+
+def find_wall(
+    levels: tuple | list, multiplier: float = 5.0,
+) -> tuple[float, float] | None:
+    """Detect dominant order wall in a sequence of (price, qty) depth levels.
+
+    Returns (wall_price, wall_qty) for the largest level that is ≥multiplier×avg,
+    or None if no such level exists.
+    """
+    if len(levels) < 5:
+        return None
+    qtys = [q for _, q in levels if q > 0]
+    if not qtys:
+        return None
+    avg = sum(qtys) / len(qtys)
+    best: tuple[float, float] | None = None
+    for price, qty in levels:
+        if qty >= avg * multiplier:
+            if best is None or qty > best[1]:
+                best = (price, qty)
+    return best
+
+
+def wall_absorption_pct(
+    history: tuple,
+    wall_price: float,
+    side: str,
+    match_pct: float = 0.001,
+    min_hist: int = 50,
+) -> float:
+    """Return fraction [0.0–1.0] of wall qty that has been absorbed.
+
+    Compares the peak observed wall qty at *wall_price* against the most recent
+    reading.  Returns 0.0 when there is insufficient history.
+
+    Args:
+        history: tuple of WallSnapshot objects from MarketSnapshot.wall_history.
+        wall_price: reference price of the wall level.
+        side: "bid" or "ask".
+        match_pct: price tolerance to consider a snapshot matching wall_price.
+        min_hist: minimum snapshots required before producing a result.
+    """
+    if len(history) < min_hist:
+        return 0.0
+    thresh = wall_price * match_pct
+    if side == "ask":
+        qtys = [
+            s.ask_wall_qty for s in history
+            if abs(s.ask_wall_price - wall_price) <= thresh and s.ask_wall_qty > 0
+        ]
+    else:
+        qtys = [
+            s.bid_wall_qty for s in history
+            if abs(s.bid_wall_price - wall_price) <= thresh and s.bid_wall_qty > 0
+        ]
+    if len(qtys) < 20:
+        return 0.0
+    max_qty = max(qtys)
+    if max_qty <= 0:
+        return 0.0
+    return max(0.0, (max_qty - qtys[-1]) / max_qty)

@@ -32,6 +32,7 @@ class SetupType(str, enum.Enum):
     CONTINUATION_BREAK = "CONTINUATION_BREAK"
     MEAN_REVERSION = "MEAN_REVERSION"
     EARLY_MOMENTUM = "EARLY_MOMENTUM"
+    WALL_BOUNCE = "WALL_BOUNCE"
 
 
 class TradeResult(str, enum.Enum):
