@@ -18,9 +18,8 @@ TRAILING_ACTIVATION_RR = 0.5  # fallback: activate trailing at 0.5× risk
 TRAILING_RISK_FACTOR = 0.4    # fallback: trail distance = 40% of original risk
 MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
 BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
-MAX_HOLD_MINUTES = 6          # SCALPING: 6 min hard cap for losers
-MAX_HOLD_IF_PROFIT = 10       # extend to 10 min if position is in profit
-STALE_EXIT_MINUTES = 8        # give trades more room to work
+MAX_HOLD_MINUTES = 6          # hard cap for losing trades that aren't moving
+STALE_EXIT_MINUTES = 4        # early exit for deep losers (>0.5% drawdown)
 STALE_EXIT_DRAWDOWN = 0.005   # 0.5% unrealized loss threshold for stale exit
 LEVERAGE = 25
 CVD_EXIT_MIN_PNL_PCT = 0.003  # 0.3% min profit for CVD exit
@@ -308,7 +307,7 @@ class PaperTrader:
             return ("tp_hit", pos.tp_price)
         if not is_long and price <= pos.tp_price:
             return ("tp_hit", pos.tp_price)
-        # Stale exit: losing >0.4% after 6 min with no improvement
+        # Stale exit: losing >0.5% after 4 min — cut deep losers early
         if not in_profit and elapsed_min >= STALE_EXIT_MINUTES:
             loss_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
             if loss_pct >= STALE_EXIT_DRAWDOWN:
@@ -325,9 +324,8 @@ class PaperTrader:
                     return ("cvd_divergence", price)
                 if not is_long and snap.cvd_delta_1m > 0:
                     return ("cvd_divergence", price)
-        # Time stop — market price
-        max_hold = MAX_HOLD_IF_PROFIT if in_profit else MAX_HOLD_MINUTES
-        if elapsed_min >= max_hold:
+        # Time stop — only for losing positions. Winners exit via trailing/cvd/TP.
+        if not in_profit and elapsed_min >= MAX_HOLD_MINUTES:
             return ("time_stop", price)
         return None
 

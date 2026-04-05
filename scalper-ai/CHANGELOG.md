@@ -189,3 +189,11 @@ Files: strategies/continuation_break.py, strategies/early_momentum.py
 ## [2026-04-05 12:08 UTC]
 Adaptive entry filters: move hardcoded ADX/ATR/CVD/sweep thresholds into AdaptiveParams, computed from atr_pct every 30s. Quiet market relaxes filters, active market tightens.
 Files: data/cache.py, core/bot_engine.py, strategies/continuation_break.py, strategies/early_momentum.py, strategies/mean_reversion.py
+
+## [2026-04-05 21:48 UTC]
+Engine: LOW_VOL regime uses MR-only; PaperTrader: time_stop losers-only, stale_exit 4min
+Files: scalper-ai/core/bot_engine.py, scalper-ai/core/paper_trader.py
+
+## [2026-04-05 21:48 UTC]
+Engine: LOW_VOL regime uses MR-only; PaperTrader: time_stop losers-only, stale_exit 4min
+Files: scalper-ai/core/bot_engine.py, scalper-ai/core/paper_trader.py

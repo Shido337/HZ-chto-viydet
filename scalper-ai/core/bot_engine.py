@@ -263,47 +263,25 @@ class BotEngine:
     # -- signal search ------------------------------------------------------
 
     def _find_signal(self, snap: Any) -> Signal | None:
-        """Run all eligible strategies and return the one with the highest score.
-
-        If two strategies fire on the same symbol simultaneously the higher-scored
-        signal wins (voting by quality, not by insertion order).
-        """
-        candidates: list[Signal] = []
+        """Run strategies and return the first valid signal (no voting delay)."""
         for strategy in self.strategies:
             name = strategy.__class__.__name__
             setup = self._class_to_setup(name)
             if not self.strategy_enabled.get(setup, True):
                 continue
-            # LOW_VOL → MR or EM only (CB needs trending)
+            # LOW_VOL → MR only (no momentum in dead market)
             if snap.regime == MarketRegime.LOW_VOL:
-                if setup not in ("EARLY_MOMENTUM", "MEAN_REVERSION"):
+                if setup != "MEAN_REVERSION":
                     continue
             boost = self.learner.predict_boost(setup, snap.symbol)
             sig = strategy.compute_signal(snap, boost)
             if sig:
-                candidates.append(sig)
-
-        if not candidates:
-            return None
-
-        # Pick winner by highest score
-        winner = max(candidates, key=lambda s: s.score)
-
-        if len(candidates) > 1:
-            losers = [s for s in candidates if s is not winner]
-            loser_str = ", ".join(
-                f"{s.setup_type.value}={s.score:.3f}" for s in losers
-            )
-            logger.info(
-                f"VOTE {snap.symbol}: {winner.setup_type.value}={winner.score:.3f} "
-                f"beats [{loser_str}]",
-            )
-        else:
-            logger.info(
-                f"SIGNAL {winner.symbol} {winner.direction.value} "
-                f"{winner.setup_type.value} score={winner.score:.3f}",
-            )
-        return winner
+                logger.info(
+                    f"SIGNAL {sig.symbol} {sig.direction.value} "
+                    f"{sig.setup_type.value} score={sig.score:.3f}",
+                )
+                return sig
+        return None
 
     # -- diagnostics --------------------------------------------------------
 
@@ -624,8 +602,9 @@ class BotEngine:
         # Quiet market  → relax entry filters (wider ADX, looser compression)
         # Active market → tighten (narrow ADX, strict compression, more CVD bars)
         #
-        # CB: adx_max — higher in quiet markets (accept weaker trends), lower in active
-        cb_adx_max = 40.0 + (100.0 - atr_pct) * 0.3   # range ~40–70
+        # CB: adx_max — CB works IN trending markets, only skip runaway extremes (ADX 80+)
+        # Active market (high atr_pct) → allow higher ADX, quiet → lower cap (weak trends)
+        cb_adx_max = 55.0 + atr_pct * 0.25             # range ~55–80
         # EM: ADX window widens in quiet markets, narrows in active
         em_adx_low = 12.0 + atr_pct * 0.08              # range ~12–20
         em_adx_high = 40.0 - atr_pct * 0.10             # range ~30–40
