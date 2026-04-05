@@ -173,3 +173,7 @@ Files: dashboard/src/hooks/useWebSocket.ts
 ## [2026-04-05 08:39 UTC]
 Session scope fix: track engine.started_at, filter restored trades by session start time
 Files: core/bot_engine.py, server/api.py, dashboard/src/hooks/useWebSocket.ts, dashboard/src/types/index.ts
+
+## [2026-04-05 10:12 UTC]
+Fix started_at format: naive UTC string to match DB closed_at format (was ISO with tz suffix)
+Files: core/bot_engine.py
