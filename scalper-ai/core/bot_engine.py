@@ -99,8 +99,8 @@ class BotEngine:
         # Pre-load exchange filters (LOT_SIZE, PRICE_FILTER) for order precision
         await self.executor.load_filters()
         from datetime import datetime, timezone
-        # Naive UTC string matching DB's closed_at format (no tz suffix)
-        self.started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        # ISO format matching API's .isoformat() for correct date comparison
+        self.started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         balance = await self.client.get_balance()
         self.risk.session_start_balance = balance if balance > 0 else 10000.0
         logger.info(f"Starting balance: ${self.risk.session_start_balance:.2f}")

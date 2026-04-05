@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTradingStore } from '../store/tradingStore';
 import type { WsEvent } from '../types';
 
-const WS_URL = `ws://${window.location.host}/ws`;
+const WS_URL = `ws://127.0.0.1:9000/ws`;
 const RECONNECT_DELAY = 3000;
 
 export function useWebSocket(): void {
@@ -51,8 +51,9 @@ export function useWebSocket(): void {
             .then((rows: Array<{ symbol: string; direction: string; pnl: number; exit_reason: string; closed_at: string | null }>) => {
               const st = useTradingStore.getState();
               if (st.trades.length === 0 && rows.length > 0) {
-                const sessionTrades = sessionStart
-                  ? rows.filter((r) => r.closed_at && r.closed_at >= sessionStart)
+                const cutoff = sessionStart ? new Date(sessionStart).getTime() : 0;
+                const sessionTrades = cutoff
+                  ? rows.filter((r) => r.closed_at && new Date(r.closed_at).getTime() >= cutoff)
                   : rows;
                 for (const r of sessionTrades.reverse()) {
                   st.addTrade({ symbol: r.symbol, direction: r.direction as 'LONG' | 'SHORT', pnl: r.pnl, reason: r.exit_reason });

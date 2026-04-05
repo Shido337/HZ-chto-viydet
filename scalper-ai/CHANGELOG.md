@@ -177,3 +177,7 @@ Files: core/bot_engine.py, server/api.py, dashboard/src/hooks/useWebSocket.ts, d
 ## [2026-04-05 10:12 UTC]
 Fix started_at format: naive UTC string to match DB closed_at format (was ISO with tz suffix)
 Files: core/bot_engine.py
+
+## [2026-04-05 10:52 UTC]
+Fix WS proxy, session filter date format, Performance Session/Total toggle
+Files: scalper-ai/core/bot_engine.py, scalper-ai/dashboard/src/hooks/useWebSocket.ts, scalper-ai/dashboard/src/components/Performance.tsx, scalper-ai/dashboard/vite.config.ts
