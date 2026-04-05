@@ -143,3 +143,8 @@ Files: dashboard/src/components/CandleChart.tsx, core/bot_engine.py, strategies/
 feat: signal arbitration — all strategies vote per symbol, highest score wins
 Files: core/bot_engine.py
 
+
+## [2026-04-05 00:16 UTC]
+fix: CandleChart v4 - decouple fetch/render via state, eliminate async ref-check race
+Files: dashboard/src/components/CandleChart.tsx
+
