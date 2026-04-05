@@ -153,3 +153,7 @@ Files: dashboard/src/components/CandleChart.tsx
 fix: disable CB (WR=23% -$7.41 over 53 trades); MR min SL 1xATR/0.3% floor; stale_exit 8min/0.5%
 Files: core/bot_engine.py, strategies/mean_reversion.py, core/paper_trader.py
 
+
+## [2026-04-05 08:14 UTC]
+CB fix: SL hard cap 0.8%, ADX<=40, rejection candle, MIN_RR 1.5, BODY_MIN 0.1% — re-enable CB
+Files: strategies/continuation_break.py, core/bot_engine.py

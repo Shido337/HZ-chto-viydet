@@ -15,11 +15,13 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # ---------------------------------------------------------------------------
 SWING_LOOKBACK = 8             # swing detection window (3m candles)
 BREAK_LOOKBACK = 10            # scan last 10 3m candles (~30 min) for a prior break
-BODY_MIN_PCT = 0.0003          # 0.03% min body on break candle (filter noise)
+BODY_MIN_PCT = 0.001           # 0.1% min body on break candle (filter noise; was 0.03%)
 RETEST_PROXIMITY_PCT = 0.006   # price within 0.6% of level = retest zone
 RETEST_OVERSHOOT_PCT = 0.002   # allow up to 0.2% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
-MIN_RR = 0.5                   # minimum 0.5:1 — trailing compensates
+MIN_RR = 1.5                   # minimum 1.5:1 (was 0.5 — too loose)
+MAX_SL_PCT = 0.008             # 0.8% hard cap: kills catastrophic swing-to-swing SLs
+ADX_MAX = 40.0                 # skip runaway trends (ADX>40) — no clean retest
 # Adaptive constants come from snap.adaptive:
 #   ob_min, volume_spike_min, min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
@@ -44,6 +46,9 @@ class ContinuationBreak(BaseStrategy):
         # Regime: TRENDING only
         if snap.regime not in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
             return None
+        # Skip runaway trends — very high ADX means price rarely retests cleanly
+        if snap.indicators.adx > ADX_MAX:
+            return None
         result = self._detect_break_and_retest(snap)
         if result is None:
             return None
@@ -54,6 +59,8 @@ class ContinuationBreak(BaseStrategy):
         if snap.regime == MarketRegime.TRENDING_BEAR and direction != Direction.SHORT:
             return None
         if not self._check_flow(snap, direction):
+            return None
+        if not self._check_rejection_candle(snap, direction):
             return None
         return self._build_signal(snap, direction, broken_level, break_idx, ml_boost)
 
@@ -145,6 +152,26 @@ class ContinuationBreak(BaseStrategy):
             return False
         return True
 
+    def _check_rejection_candle(self, snap: MarketSnapshot, d: Direction) -> bool:
+        """Most recent 1m candle must show rejection at the retest level.
+
+        LONG retest: price should be bouncing — close in upper half of candle range.
+        SHORT retest: price should be failing — close in lower half of candle range.
+        Filters out candles where price is still moving against us at the level.
+        """
+        candles = list(snap.klines_1m)
+        if not candles:
+            return False
+        cur = candles[-1]
+        h, l, c = cur["h"], cur["l"], cur["c"]
+        candle_range = h - l
+        if candle_range <= 0:
+            return True  # degenerate candle — don't reject on zero-range
+        mid = (h + l) / 2.0
+        if d == Direction.LONG:
+            return c >= mid   # close in upper half = bullish rejection of level
+        return c <= mid       # close in lower half = bearish rejection of level
+
     def _build_signal(
         self, snap: MarketSnapshot, d: Direction,
         broken_level: float, break_idx: int, ml_boost: float,
@@ -199,6 +226,9 @@ class ContinuationBreak(BaseStrategy):
         if raw_risk <= 0:
             return None
         if raw_risk > max_sl_dist:
+            return None
+        # Hard cap: structural SL wider than MAX_SL_PCT is a catastrophic-loss setup
+        if raw_risk / entry > MAX_SL_PCT:
             return None
 
         risk = max(raw_risk, min_sl_dist)

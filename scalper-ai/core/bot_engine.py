@@ -50,7 +50,7 @@ class BotEngine:
             EarlyMomentum(),
         ]
         self.strategy_enabled = {
-            "CONTINUATION_BREAK": False,  # disabled: WR=23% over 53 trades, -$7.41 net
+            "CONTINUATION_BREAK": True,   # re-enabled: SL cap 0.8%, ADX≤40, rejection candle filter
             "MEAN_REVERSION": True,
             "EARLY_MOMENTUM": True,
         }
