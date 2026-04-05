@@ -430,6 +430,7 @@ async def _send_init_state(ws: WebSocket) -> None:
                 "daily_pnl": round(engine.risk.daily_pnl, 4),
                 "mode": engine.mode,
                 "regimes": regimes,
+                "started_at": engine.started_at,
             },
         })
 

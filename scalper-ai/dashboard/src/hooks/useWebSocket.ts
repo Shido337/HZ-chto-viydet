@@ -45,12 +45,16 @@ export function useWebSocket(): void {
             store.setSelectedSymbol(symbols[0]);
           }
           // Restore session trades from DB so stats survive dashboard refresh
+          const sessionStart = event.data.started_at || '';
           fetch('/api/trades?limit=500')
             .then((r) => r.json())
-            .then((rows: Array<{ symbol: string; direction: string; pnl: number; exit_reason: string }>) => {
+            .then((rows: Array<{ symbol: string; direction: string; pnl: number; exit_reason: string; closed_at: string | null }>) => {
               const st = useTradingStore.getState();
               if (st.trades.length === 0 && rows.length > 0) {
-                for (const r of rows.reverse()) {
+                const sessionTrades = sessionStart
+                  ? rows.filter((r) => r.closed_at && r.closed_at >= sessionStart)
+                  : rows;
+                for (const r of sessionTrades.reverse()) {
                   st.addTrade({ symbol: r.symbol, direction: r.direction as 'LONG' | 'SHORT', pnl: r.pnl, reason: r.exit_reason });
                 }
               }

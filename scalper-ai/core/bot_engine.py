@@ -89,6 +89,7 @@ class BotEngine:
         self._signal_cooldown: dict[str, float] = {}  # symbol → last signal time
         self._last_screen_time = 0.0
         self._testnet = False
+        self.started_at: str = ""
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -97,6 +98,8 @@ class BotEngine:
         await self.client.start()
         # Pre-load exchange filters (LOT_SIZE, PRICE_FILTER) for order precision
         await self.executor.load_filters()
+        from datetime import datetime, timezone
+        self.started_at = datetime.now(timezone.utc).isoformat()
         balance = await self.client.get_balance()
         self.risk.session_start_balance = balance if balance > 0 else 10000.0
         logger.info(f"Starting balance: ${self.risk.session_start_balance:.2f}")

@@ -117,6 +117,7 @@ export interface InitState {
   daily_pnl: number;
   mode: 'paper' | 'live';
   regimes: Record<string, string>;
+  started_at: string;
 }
 
 /** Adaptive price formatter: more decimals for small-priced tokens */
