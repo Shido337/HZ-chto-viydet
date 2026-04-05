@@ -259,6 +259,12 @@ class BotEngine:
     # -- signal search ------------------------------------------------------
 
     def _find_signal(self, snap: Any) -> Signal | None:
+        """Run all eligible strategies and return the one with the highest score.
+
+        If two strategies fire on the same symbol simultaneously the higher-scored
+        signal wins (voting by quality, not by insertion order).
+        """
+        candidates: list[Signal] = []
         for strategy in self.strategies:
             name = strategy.__class__.__name__
             setup = self._class_to_setup(name)
@@ -271,12 +277,29 @@ class BotEngine:
             boost = self.learner.predict_boost(setup, snap.symbol)
             sig = strategy.compute_signal(snap, boost)
             if sig:
-                logger.info(
-                    f"SIGNAL {sig.symbol} {sig.direction.value} "
-                    f"{sig.setup_type.value} score={sig.score:.3f}",
-                )
-                return sig
-        return None
+                candidates.append(sig)
+
+        if not candidates:
+            return None
+
+        # Pick winner by highest score
+        winner = max(candidates, key=lambda s: s.score)
+
+        if len(candidates) > 1:
+            losers = [s for s in candidates if s is not winner]
+            loser_str = ", ".join(
+                f"{s.setup_type.value}={s.score:.3f}" for s in losers
+            )
+            logger.info(
+                f"VOTE {snap.symbol}: {winner.setup_type.value}={winner.score:.3f} "
+                f"beats [{loser_str}]",
+            )
+        else:
+            logger.info(
+                f"SIGNAL {winner.symbol} {winner.direction.value} "
+                f"{winner.setup_type.value} score={winner.score:.3f}",
+            )
+        return winner
 
     # -- diagnostics --------------------------------------------------------
 

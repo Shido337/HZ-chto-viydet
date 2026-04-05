@@ -138,3 +138,8 @@ Files: dashboard/src/components/CandleChart.tsx
 fix: chart explicit dims+ResizeObserver; CB lookback 10/prox 0.6%; update bot_engine CB diag
 Files: dashboard/src/components/CandleChart.tsx, core/bot_engine.py, strategies/continuation_break.py
 
+
+## [2026-04-05 00:07 UTC]
+feat: signal arbitration — all strategies vote per symbol, highest score wins
+Files: core/bot_engine.py
+
