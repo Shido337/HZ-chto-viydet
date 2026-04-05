@@ -157,3 +157,7 @@ Files: core/bot_engine.py, strategies/mean_reversion.py, core/paper_trader.py
 ## [2026-04-05 08:14 UTC]
 CB fix: SL hard cap 0.8%, ADX<=40, rejection candle, MIN_RR 1.5, BODY_MIN 0.1% — re-enable CB
 Files: strategies/continuation_break.py, core/bot_engine.py
+
+## [2026-04-05 08:19 UTC]
+MR fix: CVD norm 1500 (was 5000), dynamic structure/vol score, sweep window 5 (was 3)
+Files: strategies/mean_reversion.py

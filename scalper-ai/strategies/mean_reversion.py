@@ -19,6 +19,8 @@ VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP
 SL_BUFFER_PCT = 0.0005    # 0.05% beyond sweep extreme
 ENTRY_RETRACEMENT = 0.5   # enter at 50% of sweep_extreme→swing_level range
 MIN_RR = 0.5              # minimum 0.5:1 — trailing compensates
+SWEEP_WINDOW = 5          # check last 5 1m candles for a sweep (was 3)
+CVD_NORM_MR = 1500.0      # CVD normalizer: ranging markets have lower abs CVD (was 5000)
 # Adaptive constants come from snap.adaptive:
 #   ob_min (as flip threshold), min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
@@ -60,7 +62,7 @@ class MeanReversion(BaseStrategy):
             return None
 
         ob_flip = snap.adaptive.ob_min
-        for c in candles_1m[-3:]:
+        for c in candles_1m[-SWEEP_WINDOW:]:
             if c["h"] > swing_h:
                 sweep_pct = (c["h"] - swing_h) / swing_h
                 if SWEEP_MIN_PCT <= sweep_pct <= SWEEP_MAX_PCT:
@@ -101,12 +103,15 @@ class MeanReversion(BaseStrategy):
         vwap_val = calc_vwap(candles_1m)
 
         cvd_usd = abs(snap.cvd_delta_1m * snap.price)
+        # sweep_quality: how clean/deep the wick was (scales 0→1)
+        sweep_depth_pct = abs(sweep_extreme - swing_level) / swing_level if swing_level else 0.0
+        sweep_quality = min(sweep_depth_pct / SWEEP_MAX_PCT, 1.0)
         comp = ScoreComponents(
-            cvd_alignment=min(cvd_usd / 5000, 1.0) * 0.25,
+            cvd_alignment=min(cvd_usd / CVD_NORM_MR, 1.0) * 0.25,
             ob_imbalance=(ob if d == Direction.LONG else 1 - ob) * 0.20,
-            volume_confirmation=0.10,
-            structure_quality=0.12,
-            regime_match=0.15,
+            volume_confirmation=sweep_quality * 0.15,       # deeper sweep = better
+            structure_quality=sweep_quality * 0.15,         # dynamic, not fixed
+            regime_match=0.10,
             ml_boost=min(ml_boost, 0.10),
         )
         score = comp.total()
