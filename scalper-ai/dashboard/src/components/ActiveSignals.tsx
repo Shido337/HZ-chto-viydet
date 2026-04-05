@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTradingStore } from '../store/tradingStore';
+import { fmtPrice, fmtScore } from '../types';
 
 export const ActiveSignals: React.FC = () => {
   const signals = useTradingStore((s) => s.signals);
@@ -28,7 +29,7 @@ export const ActiveSignals: React.FC = () => {
               {sig.direction}
             </span>
             <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>
-              {(sig.score * 5).toFixed(1)}
+              {fmtScore(sig.score)}
             </span>
           </div>
           <div style={{ color: 'var(--text-secondary)', fontSize: 10 }}>
@@ -36,7 +37,7 @@ export const ActiveSignals: React.FC = () => {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
             <span>{sig.symbol}</span>
-            <span>E: {sig.entry_price.toFixed(2)}</span>
+            <span>E: {fmtPrice(sig.entry_price)}</span>
           </div>
           <div
             style={{
@@ -46,8 +47,8 @@ export const ActiveSignals: React.FC = () => {
               color: 'var(--text-secondary)',
             }}
           >
-            <span>SL: {sig.sl_price.toFixed(2)}</span>
-            <span>TP: {sig.tp_price.toFixed(2)}</span>
+            <span>SL: {fmtPrice(sig.sl_price)}</span>
+            <span>TP: {fmtPrice(sig.tp_price)}</span>
           </div>
         </div>
       ))}

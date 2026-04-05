@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTradingStore } from '../store/tradingStore';
+import { fmtPrice, fmtScore } from '../types';
 
 export const OpenPositions: React.FC = () => {
   const positions = useTradingStore((s) => s.positions);
@@ -54,12 +55,12 @@ export const OpenPositions: React.FC = () => {
                   </span>
                 </td>
                 <td style={{ fontSize: 10 }}>{p.setup_type.replace(/_/g, ' ')}</td>
-                <td>{(p.score * 5).toFixed(1)}</td>
-                <td>{p.entry_price.toFixed(2)}</td>
-                <td style={{ color: 'var(--red)' }}>{p.sl_price.toFixed(2)}</td>
-                <td style={{ color: 'var(--green)' }}>{p.tp_price.toFixed(2)}</td>
+                <td>{fmtScore(p.score)}</td>
+                <td>{fmtPrice(p.entry_price)}</td>
+                <td style={{ color: 'var(--red)' }}>{fmtPrice(p.sl_price)}</td>
+                <td style={{ color: 'var(--green)' }}>{fmtPrice(p.tp_price)}</td>
                 <td>{p.size_usdt.toFixed(2)}</td>
-                <td>{currentPrice ? currentPrice.toFixed(2) : '—'}</td>
+                <td>{currentPrice ? fmtPrice(currentPrice) : '—'}</td>
                 <td style={{ color: pnlColor, fontWeight: 600 }}>
                   {p.current_pnl >= 0 ? '+' : ''}
                   {p.current_pnl.toFixed(2)}

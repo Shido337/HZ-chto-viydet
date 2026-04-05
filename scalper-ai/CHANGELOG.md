@@ -161,3 +161,7 @@ Files: strategies/continuation_break.py, core/bot_engine.py
 ## [2026-04-05 08:19 UTC]
 MR fix: CVD norm 1500 (was 5000), dynamic structure/vol score, sweep window 5 (was 3)
 Files: strategies/mean_reversion.py
+
+## [2026-04-05 08:23 UTC]
+Dashboard fix: adaptive price formatting, score as %, clear chart on symbol change
+Files: dashboard/src/types/index.ts, dashboard/src/components/OpenPositions.tsx, dashboard/src/components/ActiveSignals.tsx, dashboard/src/components/CandleChart.tsx

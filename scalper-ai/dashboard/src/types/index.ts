@@ -119,6 +119,22 @@ export interface InitState {
   regimes: Record<string, string>;
 }
 
+/** Adaptive price formatter: more decimals for small-priced tokens */
+export function fmtPrice(p: number): string {
+  if (!p || p === 0) return '0.00';
+  const a = Math.abs(p);
+  if (a >= 1000) return p.toFixed(2);
+  if (a >= 10)   return p.toFixed(3);
+  if (a >= 1)    return p.toFixed(4);
+  if (a >= 0.1)  return p.toFixed(5);
+  return p.toFixed(6);
+}
+
+/** Score as percentage string, e.g. "73%" */
+export function fmtScore(score: number): string {
+  return `${(score * 100).toFixed(0)}%`;
+}
+
 export type WsEvent =
   | { type: 'init_state'; data: InitState }
   | { type: 'market_snapshot'; data: MarketSnapshot }

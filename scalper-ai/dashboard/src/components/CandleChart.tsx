@@ -68,7 +68,9 @@ export const CandleChart: React.FC = () => {
   // ── 2. Fetch klines → store in state (no chart access here) ────────────
   useEffect(() => {
     if (!symbol) return;
-    setFetchedData(null); // clear stale data while loading
+    setFetchedData(null);
+    // Clear chart immediately so stale symbol data doesn't linger during fetch
+    if (seriesRef.current) seriesRef.current.setData([]);
     let cancelled = false;
     fetch(`/api/klines/${symbol}`)
       .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
