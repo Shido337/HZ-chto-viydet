@@ -9,8 +9,8 @@ from loguru import logger
 # Screening thresholds
 # ---------------------------------------------------------------------------
 MIN_QUOTE_VOLUME_24H = 70_000_000.0    # $70M min 24h USDT volume
-MAX_SPREAD_PCT = 0.0008                  # 0.08% max bid-ask spread
-MIN_PRICE_CHANGE_PCT = 10.0             # min 10% daily move
+MAX_SPREAD_PCT = 0.0015                  # 0.15% max bid-ask spread
+MIN_PRICE_CHANGE_PCT = 5.0              # min 5% daily move
 MAX_PRICE_CHANGE_PCT = 50.0             # max 50% daily move
 MIN_TRADE_COUNT_24H = 0                 # no trade count filter
 MAX_SYMBOLS = 10                        # top N to select (was 12 — quality > quantity)
