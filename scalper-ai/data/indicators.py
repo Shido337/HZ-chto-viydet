@@ -221,13 +221,21 @@ def volume_spike_ratio(candles: list[dict[str, Any]], period: int = 20) -> float
 # ---------------------------------------------------------------------------
 
 def find_wall(
-    levels: tuple | list, multiplier: float = 5.0,
+    levels: tuple | list,
+    multiplier: float = 5.0,
+    mid_price: float = 0.0,
+    max_dist_pct: float = 0.05,
 ) -> tuple[float, float] | None:
     """Detect dominant order wall in a sequence of (price, qty) depth levels.
 
+    Only considers levels within *max_dist_pct* of *mid_price* (default 5%).
     Returns (wall_price, wall_qty) for the largest level that is ≥multiplier×avg,
     or None if no such level exists.
     """
+    if mid_price > 0:
+        lo = mid_price * (1.0 - max_dist_pct)
+        hi = mid_price * (1.0 + max_dist_pct)
+        levels = [(p, q) for p, q in levels if lo <= p <= hi]
     if len(levels) < 5:
         return None
     qtys = [q for _, q in levels if q > 0]

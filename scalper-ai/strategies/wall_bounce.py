@@ -61,8 +61,9 @@ class WallBounce(BaseStrategy):
         if not snap.depth_bids or not snap.depth_asks:
             return None  # no depth data received yet
 
-        bid_wall = find_wall(snap.depth_bids)
-        ask_wall = find_wall(snap.depth_asks)
+        mid = snap.price
+        bid_wall = find_wall(snap.depth_bids, mid_price=mid)
+        ask_wall = find_wall(snap.depth_asks, mid_price=mid)
         if bid_wall is None and ask_wall is None:
             return None  # no significant wall on either side
 
