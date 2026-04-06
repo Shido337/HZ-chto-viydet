@@ -329,3 +329,7 @@ Files: data/indicators.py, data/cache.py, core/bot_engine.py, strategies/wall_bo
 ## [2026-04-06 20:05 UTC]
 fix: wall_on_round_number — remove fine divisors (25+), fixes false positives on 84783/16783
 Files: data/indicators.py
+
+## [2026-04-06 20:08 UTC]
+revert: restore all files to 880f649 (clean initial WallBounce) — start fresh
+Files: data/indicators.py, data/cache.py, core/bot_engine.py, strategies/wall_bounce.py

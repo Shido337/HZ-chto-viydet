@@ -19,7 +19,7 @@ ranging/low-vol but is allowed everywhere.
 from __future__ import annotations
 
 from data.cache import MarketRegime, MarketSnapshot
-from data.indicators import find_wall, order_book_imbalance, wall_absorption_pct, wall_on_round_number, count_level_touches
+from data.indicators import find_wall, order_book_imbalance, wall_absorption_pct
 from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy
 
@@ -29,7 +29,6 @@ from strategies.base_strategy import BaseStrategy
 BOUNCE_DIST_PCT: float = 0.003    # price within 0.3 % of wall to qualify
 ABSORPTION_PCT: float = 0.40      # ≥40 % wall qty absorbed = active absorption
 MIN_CVD_BUILD: float = 150.0      # minimum |CVD delta 1m| for absorption
-BTC_CVD_THRESHOLD: float = 300.0  # BTC CVD strength gate for leader / поводырь filter
 SL_BUFFER_PCT: float = 0.0008     # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float = 0.008         # hard cap: never risk more than 0.8 %
 MIN_RR: float = 1.5               # minimum reward-to-risk ratio
@@ -79,10 +78,7 @@ class WallBounce(BaseStrategy):
             wp, wq = ask_wall
             if snap.price < wp:
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
-                if (abs_pct >= ABSORPTION_PCT
-                        and snap.cvd_delta_1m >= MIN_CVD_BUILD
-                        and wall_on_round_number(wp)
-                        and snap.btc_cvd_delta_1m >= -BTC_CVD_THRESHOLD):
+                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m >= MIN_CVD_BUILD:
                     entry = snap.ask
                     atr = ap.atr_value
                     raw_sl = entry - max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 - 0.003)
@@ -103,10 +99,7 @@ class WallBounce(BaseStrategy):
             wp, wq = bid_wall
             if snap.price > wp:
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
-                if (abs_pct >= ABSORPTION_PCT
-                        and snap.cvd_delta_1m <= -MIN_CVD_BUILD
-                        and wall_on_round_number(wp)
-                        and snap.btc_cvd_delta_1m <= BTC_CVD_THRESHOLD):
+                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m <= -MIN_CVD_BUILD:
                     entry = snap.bid
                     atr = ap.atr_value
                     raw_sl = entry + max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 + 0.003)
@@ -133,18 +126,13 @@ class WallBounce(BaseStrategy):
         ml_boost: float,
     ) -> Signal | None:
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-        klines_1m = list(snap.klines_1m)
 
         # LONG: large bid wall below, price approaching from above → expect bounce
         if bid_wall:
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                if (wall_on_round_number(wp)                   # CScalp: spoof filter — real walls on round numbers
-                        and count_level_touches(klines_1m, wp) >= 2  # CScalp: ≥2 touches = confirmed level
-                        and snap.btc_cvd_delta_1m >= -BTC_CVD_THRESHOLD  # CScalp: BTC leader not opposing
-                        and snap.cvd_delta_1m >= 0
-                        and ob >= 0.48):
+                if snap.cvd_delta_1m >= 0 and ob >= 0.48:
                     entry = snap.ask
                     sl = wp * (1 - SL_BUFFER_PCT)
                     sl_dist = (entry - sl) / entry
@@ -161,11 +149,7 @@ class WallBounce(BaseStrategy):
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                if (wall_on_round_number(wp)                   # CScalp: spoof filter — real walls on round numbers
-                        and count_level_touches(klines_1m, wp) >= 2  # CScalp: ≥2 touches = confirmed level
-                        and snap.btc_cvd_delta_1m <= BTC_CVD_THRESHOLD   # CScalp: BTC leader not opposing
-                        and snap.cvd_delta_1m <= 0
-                        and ob <= 0.52):
+                if snap.cvd_delta_1m <= 0 and ob <= 0.52:
                     entry = snap.bid
                     sl = wp * (1 + SL_BUFFER_PCT)
                     sl_dist = (sl - entry) / entry

@@ -20,7 +20,7 @@ class MarketRegime(str, Enum):
     HIGH_VOL = "HIGH_VOL"
 
 
-WALL_MULTIPLIER = 5.0  # a level is a "wall" when its qty >= 5x average — matches find_wall default
+WALL_MULTIPLIER = 5.0  # a level is a "wall" when its qty >= 5x average of all 20 levels
 
 
 @dataclass(frozen=True)
@@ -114,7 +114,6 @@ class MarketSnapshot:
     depth_bids: tuple[tuple[float, float], ...] = ()   # (price, qty) top 20 bids from @depth20
     depth_asks: tuple[tuple[float, float], ...] = ()   # (price, qty) top 20 asks from @depth20
     wall_history: tuple[WallSnapshot, ...] = ()        # recent depth wall snapshots (300 × 100ms = 30s)
-    btc_cvd_delta_1m: float = 0.0   # BTC 1m CVD delta — used as market leader / поводырь filter
     stale: bool = False
     ts: float = 0.0
 
@@ -325,7 +324,6 @@ class MarketCache:
             depth_bids=tuple(self.depth_bids.get(symbol, [])),
             depth_asks=tuple(self.depth_asks.get(symbol, [])),
             wall_history=tuple(self.wall_history.get(symbol, deque())),
-            btc_cvd_delta_1m=self.cvd_delta_1m.get("BTCUSDT", 0.0),
             stale=self._stale.get(symbol, False),
             ts=time.time(),
         )
