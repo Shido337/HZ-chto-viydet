@@ -40,7 +40,7 @@ from strategies.base_strategy import BaseStrategy
 # ---------------------------------------------------------------------------
 BOUNCE_DIST_PCT: float  = 0.003   # price within 0.3 % of wall to enter
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
-ABSORPTION_PCT: float   = 0.40    # ≥40 % wall qty absorbed = active absorption
+ABSORPTION_PCT: float   = 0.55    # ≥55 % wall qty absorbed = active absorption
 MIN_CVD_BUILD: float    = 150.0   # minimum |CVD delta 1m| for absorption
 WALL_MIN_SECS: float    = 5.0     # wall must be present ≥5 s (spoof filter)
 VEI_MAX_BOUNCE: float   = 1.2     # bounce skipped when ATR(10)/ATR(50) > 1.2
@@ -247,10 +247,20 @@ class WallBounce(BaseStrategy):
         structure_score = min(abs_pct + 0.30, 1.0) * 0.15 if mode == "absorption" else 0.10
 
         if mode == "absorption":
-            regime_ok = snap.regime in (
-                MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
-                MarketRegime.HIGH_VOL,
+            # Absorption is a with-trend play when regime strongly trending.
+            # Counter-trend absorption (e.g. SHORT in TRENDING_BULL) gets no
+            # regime bonus — the trend has momentum that can overwhelm a wall.
+            bull_trend = snap.regime == MarketRegime.TRENDING_BULL
+            bear_trend = snap.regime == MarketRegime.TRENDING_BEAR
+            aligned = (
+                (d == Direction.LONG and (bull_trend or snap.regime == MarketRegime.HIGH_VOL))
+                or (d == Direction.SHORT and (bear_trend or snap.regime == MarketRegime.HIGH_VOL))
+                or snap.regime in (MarketRegime.RANGING, MarketRegime.LOW_VOL)
             )
+            # Hard block: never take absorption shorts in a strong bull trend (or vice versa)
+            if (d == Direction.SHORT and bull_trend) or (d == Direction.LONG and bear_trend):
+                return None
+            regime_ok = aligned
         else:
             regime_ok = True  # bounce works in all regimes
         regime_score = 0.15 if regime_ok else 0.07

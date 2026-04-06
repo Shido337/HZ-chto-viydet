@@ -21,3 +21,7 @@ feat: replace depth20@100ms with full incremental order book (@depth@100ms)
 ## [2026-04-06 23:04 UTC]
 feat: adaptive price bucketing in find_wall and _detect_wall (BUCKET_PCT=0.1%)
 Files: data/indicators.py, data/cache.py
+
+## [2026-04-06 23:10 UTC]
+fix: WallBounce absorption blocked in counter-trend regime; ABSORPTION_PCT 0.40->0.55
+Files: strategies/wall_bounce.py
