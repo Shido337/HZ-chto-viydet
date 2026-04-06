@@ -24,7 +24,7 @@ DEPTH_WALL_MULT = 5.0                   # level ≥5× avg = wall (for screening
 # BNB — Binance-native, unusual book dynamics.
 EXCLUDED_SYMBOLS: set[str] = {
     "BTCUSDT", "ETHUSDT", "BNBUSDT",
-    "ADAUSDT", "AVAXUSDT", "DOTUSDT",
+    "ADAUSDT", "DOTUSDT",
 }
 
 
