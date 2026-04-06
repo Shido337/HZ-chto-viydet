@@ -313,3 +313,7 @@ Files: core/coin_screener.py
 ## [2026-04-06 19:19 UTC]
 screener: tighten quality thresholds — vol $100M, change 2-18%, trades 300k (data-verified against live Binance)
 Files: core/coin_screener.py
+
+## [2026-04-06 19:22 UTC]
+screener: change range 10-40% — only real movers get traded
+Files: core/coin_screener.py

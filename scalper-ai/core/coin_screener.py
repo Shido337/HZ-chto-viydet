@@ -11,8 +11,8 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 MIN_QUOTE_VOLUME_24H = 100_000_000.0   # $100M min 24h USDT volume — ensures real liquidity
 MAX_SPREAD_PCT = 0.0005                  # 0.05% max bid-ask spread
-MIN_PRICE_CHANGE_PCT = 2.0              # min 2% daily move — requires real volatility, kills dead coins
-MAX_PRICE_CHANGE_PCT = 18.0             # max 18% daily move — allows volatile mid-caps, still kills pumps
+MIN_PRICE_CHANGE_PCT = 10.0             # min 10% daily move — only coins with real intraday volatility
+MAX_PRICE_CHANGE_PCT = 40.0             # max 40% daily move — allows hot movers, kills insane pumps
 MIN_TRADE_COUNT_24H = 300_000           # min 300k trades — real intraday scalping activity
 MAX_SYMBOLS = 20                        # top 20
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
