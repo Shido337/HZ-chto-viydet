@@ -1,5 +1,14 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-06 17:08 UTC]
+WB: CVD-sweep detection — cancel bounce fill, let absorption enter breakout
+Problem: bounce limits were filling even when CVD was strongly AGAINST direction
+(e.g. LONG bounce fill with CVD=-93960). Wall exists but flow sweeps through it.
+Fix 1 (paper_trader): intercept bounce fills — if CVD >= WB_CVD_FLIP_THRESHOLD (500)
+against direction, cancel the limit instead of filling. Absorption fires next tick.
+Fix 2 (wall_bounce): _check_absorption() gains CVD-only path (cvd_delta >= 2*MIN_CVD=1000)
+so it fires even before wall qty history shows decline — fast response to CVD sweeps.
+
 ## [2026-04-06 14:51 UTC]
 WB: fix absorption SL (ATR-based, min 0.3%), WALL_MISS_GRACE 3->10 (1s at 100ms loop)
 Bug 1: absorption market entries had SL = wp*(1-0.002) but entry < wp for LONG,

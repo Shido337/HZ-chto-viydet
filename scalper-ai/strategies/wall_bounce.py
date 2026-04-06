@@ -86,11 +86,19 @@ class WallBounce(BaseStrategy):
             wp, wq = ask_wall
             dist_to_wall = (wp - snap.price) / snap.price if snap.price else 1.0
             abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
-            if (
+            # Two paths to absorption entry:
+            # 1. Qty history: wall gradually disappearing (original)
+            qty_path = (
                 abs_pct >= ABSORPTION_PCT
+                and wall_is_eaten(snap.wall_history, wp, "ask")
+            )
+            # 2. CVD sweep: aggressive buy flow overwhelms wall even before qty shows decline.
+            #    2x MIN_CVD_BUILD = conviction threshold (same scale as qty absorption).
+            cvd_path = snap.cvd_delta_1m >= MIN_CVD_BUILD * 2
+            if (
+                (qty_path or cvd_path)
                 and snap.cvd_delta_1m >= MIN_CVD_BUILD
-                and dist_to_wall <= BOUNCE_DIST_PCT  # price is close but not past wall yet
-                and wall_is_eaten(snap.wall_history, wp, "ask")  # gradual eating, not spoof
+                and dist_to_wall <= BOUNCE_DIST_PCT
             ):
                 entry = snap.ask  # market entry — breakout is imminent
                 atr = ap.atr_value
@@ -116,11 +124,16 @@ class WallBounce(BaseStrategy):
             wp, wq = bid_wall
             dist_to_wall = (snap.price - wp) / wp if wp else 1.0
             abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
-            if (
+            # Two paths (mirror of LONG):
+            qty_path = (
                 abs_pct >= ABSORPTION_PCT
+                and wall_is_eaten(snap.wall_history, wp, "bid")
+            )
+            cvd_path = snap.cvd_delta_1m <= -MIN_CVD_BUILD * 2
+            if (
+                (qty_path or cvd_path)
                 and snap.cvd_delta_1m <= -MIN_CVD_BUILD
-                and dist_to_wall <= BOUNCE_DIST_PCT  # price close but not past wall yet
-                and wall_is_eaten(snap.wall_history, wp, "bid")  # gradual eating, not spoof
+                and dist_to_wall <= BOUNCE_DIST_PCT
             ):
                 entry = snap.bid
                 atr = ap.atr_value

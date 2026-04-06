@@ -36,6 +36,7 @@ TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
 PENDING_TIMEOUT = 60  # seconds — give pullback entries more time to fill
 PENDING_WB_TIMEOUT = 30  # WB bounce limit: wall edge is short-lived, cancel sooner
 WALL_MISS_GRACE = 10  # cancel pending after N consecutive wall-miss checks (10 x 100ms = 1s)
+WB_CVD_FLIP_THRESHOLD = 500.0  # |cvd_delta_1m| that indicates wall is being swept, not defended
 
 
 class PaperTrader:
@@ -176,6 +177,29 @@ class PaperTrader:
                 is_filled = snap.bid >= order.entry_price > 0
 
             if is_filled:
+                # WB bounce: check CVD at fill moment.
+                # If CVD is strongly AGAINST the bounce direction the wall is being swept,
+                # not defended — cancel the limit so absorption fires on next tick instead.
+                if (
+                    order.setup_type == SetupType.WALL_BOUNCE
+                    and order.signal.wall_ref_price > 0
+                ):
+                    cvd = snap.cvd_delta_1m
+                    cvd_sweeping = (
+                        order.direction == Direction.LONG and cvd <= -WB_CVD_FLIP_THRESHOLD
+                        or order.direction == Direction.SHORT and cvd >= WB_CVD_FLIP_THRESHOLD
+                    )
+                    if cvd_sweeping:
+                        del self.pending[symbol]
+                        self._wall_miss.pop(symbol, None)
+                        expired.append(order)
+                        logger.info(
+                            f"[PAPER] WB CVD_FLIP {symbol} "
+                            f"{order.direction.value} bounce blocked: "
+                            f"CVD={cvd:.0f} sweeping wall — absorption fires next tick",
+                        )
+                        continue
+
                 pos = Position(
                     signal=order.signal,
                     symbol=order.symbol,
