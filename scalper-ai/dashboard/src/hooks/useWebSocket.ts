@@ -33,6 +33,8 @@ export function useWebSocket(): void {
       switch (event.type) {
         case 'init_state': {
           const { symbols, balance, daily_pnl, mode, regimes } = event.data;
+          // New bot start = new session: reset all session-scoped state
+          useTradingStore.setState({ trades: [], signals: [] });
           store.setSymbols(symbols);
           store.setBalance(balance, daily_pnl);
           store.setMode(mode);
@@ -44,20 +46,20 @@ export function useWebSocket(): void {
           if (!symbols.includes(current) && symbols.length > 0) {
             store.setSelectedSymbol(symbols[0]);
           }
-          // Restore session trades from DB so stats survive dashboard refresh
+          // Restore session trades from DB (only trades closed after bot start)
           const sessionStart = event.data.started_at || '';
           fetch('/api/trades?limit=500')
             .then((r) => r.json())
             .then((rows: Array<{ symbol: string; direction: string; pnl: number; exit_reason: string; closed_at: string | null }>) => {
-              const st = useTradingStore.getState();
-              if (st.trades.length === 0 && rows.length > 0) {
-                const cutoff = sessionStart ? new Date(sessionStart).getTime() : 0;
-                const sessionTrades = cutoff
-                  ? rows.filter((r) => r.closed_at && new Date(r.closed_at).getTime() >= cutoff)
-                  : rows;
-                for (const r of sessionTrades.reverse()) {
-                  st.addTrade({ symbol: r.symbol, direction: r.direction as 'LONG' | 'SHORT', pnl: r.pnl, reason: r.exit_reason });
-                }
+              // Treat bare datetime strings as UTC (backend stores UTC without 'Z')
+              const toMs = (s: string) =>
+                new Date(s.includes('+') || s.endsWith('Z') ? s : s + 'Z').getTime();
+              const cutoff = sessionStart ? toMs(sessionStart) : 0;
+              const sessionTrades = cutoff
+                ? rows.filter((r) => r.closed_at && toMs(r.closed_at) >= cutoff)
+                : rows;
+              for (const r of sessionTrades.reverse()) {
+                useTradingStore.getState().addTrade({ symbol: r.symbol, direction: r.direction as 'LONG' | 'SHORT', pnl: r.pnl, reason: r.exit_reason });
               }
             })
             .catch(() => {});

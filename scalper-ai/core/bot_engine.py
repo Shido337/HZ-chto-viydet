@@ -84,6 +84,7 @@ class BotEngine:
         self._tick_count = 0
         self._on_trade_close: Any = None  # callback for server WS
         self._on_signal: Any = None
+        self._on_signal_expired: Any = None
         self._on_regime: Any = None
         self._on_position_opened: Any = None
         self._on_kline_update: Any = None
@@ -457,6 +458,9 @@ class BotEngine:
             result = await result
         if result is None:
             return
+        # Signal was consumed — remove it from the dashboard
+        if self._on_signal_expired:
+            await self._on_signal_expired(signal)
         # PaperTrader returns PendingOrder, LiveTrader returns Position
         if isinstance(result, PendingOrder):
             # Market fills (EM) go straight to positions — notify as opened

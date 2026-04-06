@@ -49,3 +49,7 @@ Files: core/coin_screener.py
 ## [2026-04-06 23:41 UTC]
 screener: MAX_SYMBOLS 12->20
 Files: core/coin_screener.py
+
+## [2026-04-06 23:53 UTC]
+fix: session reset on restart + signals expire after execution
+Files: dashboard/src/hooks/useWebSocket.ts, core/bot_engine.py, server/api.py

@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         await init_db()
         engine._on_trade_close = _on_trade_close
         engine._on_signal = _on_signal_new
+        engine._on_signal_expired = _on_signal_expired
         engine._on_regime = _on_regime_update
         engine._on_position_opened = _on_position_opened
         engine._on_kline_update = _on_kline_update
@@ -101,6 +102,13 @@ async def _on_signal_new(signal: Signal) -> None:
             "tp_price": signal.tp_price,
             "created_at": signal.created_at,
         },
+    })
+
+
+async def _on_signal_expired(signal: Signal) -> None:
+    await ws_mgr.broadcast({
+        "type": "signal_expired",
+        "data": {"id": signal.id},
     })
 
 
