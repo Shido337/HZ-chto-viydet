@@ -241,43 +241,6 @@ def find_wall(
     return best
 
 
-def wall_qty_at_price(
-    levels: tuple | list,
-    wall_price: float,
-    tolerance: float = 0.001,
-) -> float:
-    """Return current qty at *wall_price* level (±tolerance), or 0.0 if absent."""
-    for price, qty in levels:
-        if abs(price - wall_price) / wall_price <= tolerance:
-            return float(qty)
-    return 0.0
-
-
-def wall_stable(
-    history: tuple,
-    wall_price: float,
-    side: str,
-    min_readings: int = 80,
-    lookback: int = 100,
-    match_pct: float = 0.001,
-) -> bool:
-    """True if wall at *wall_price* was seen in ≥*min_readings* of the last *lookback* snapshots.
-
-    With depth @100ms: lookback=100 → 10s window, min_readings=80 → wall present ≥80% of time.
-    Filters spoofs that appear briefly and vanish.
-    """
-    if len(history) < lookback:
-        return False  # not enough data — wait for 10s of history before trusting walls
-    window = history[-lookback:]
-    count = 0
-    for snap in window:
-        wp = snap.bid_wall_price if side == "bid" else snap.ask_wall_price
-        wq = snap.bid_wall_qty if side == "bid" else snap.ask_wall_qty
-        if wq > 0 and wp > 0 and abs(wp - wall_price) / wall_price <= match_pct:
-            count += 1
-    return count >= min_readings
-
-
 def wall_absorption_pct(
     history: tuple,
     wall_price: float,
@@ -301,48 +264,6 @@ def wall_absorption_pct(
         return 0.0
     thresh = wall_price * match_pct
     if side == "ask":
-        matched = [
-            (s.ts, s.ask_wall_qty) for s in history
-            if abs(s.ask_wall_price - wall_price) <= thresh and s.ask_wall_qty > 0
-        ]
-    else:
-        matched = [
-            (s.ts, s.bid_wall_qty) for s in history
-            if abs(s.bid_wall_price - wall_price) <= thresh and s.bid_wall_qty > 0
-        ]
-    if len(matched) < 20:
-        return 0.0
-    max_qty = max(q for _, q in matched)
-    if max_qty <= 0:
-        return 0.0
-    # latest_qty = qty from the most recent snapshot that matches (by timestamp)
-    latest_qty = max(matched, key=lambda x: x[0])[1]
-    return max(0.0, (max_qty - latest_qty) / max_qty)
-
-
-def wall_is_eaten(
-    history: tuple,
-    wall_price: float,
-    side: str,
-    match_pct: float = 0.001,
-    min_readings: int = 10,
-    gradual_threshold: float = 0.5,
-) -> bool:
-    """Distinguish real eating (gradual decline) from spoofing (sudden removal).
-
-    A wall is considered *eaten* when its qty decreased through at least
-    ``min_readings`` intermediate readings with a mostly monotonic decline.
-    If the wall qty drops by >50 % between consecutive snapshots at any point
-    and that single drop accounts for more than *gradual_threshold* of the
-    total decline, we classify it as *removed* (spoof / pull).
-
-    Returns True  → wall eaten gradually (real absorption).
-    Returns False → wall removed suddenly (spoof) or insufficient data.
-    """
-    if len(history) < min_readings:
-        return False
-    thresh = wall_price * match_pct
-    if side == "ask":
         qtys = [
             s.ask_wall_qty for s in history
             if abs(s.ask_wall_price - wall_price) <= thresh and s.ask_wall_qty > 0
@@ -352,21 +273,9 @@ def wall_is_eaten(
             s.bid_wall_qty for s in history
             if abs(s.bid_wall_price - wall_price) <= thresh and s.bid_wall_qty > 0
         ]
-    if len(qtys) < min_readings:
-        return False
-    peak = max(qtys)
-    if peak <= 0:
-        return False
-    total_decline = peak - qtys[-1]
-    if total_decline <= 0:
-        return False  # not declining
-    # Find the largest single-step drop
-    max_single_drop = 0.0
-    for i in range(1, len(qtys)):
-        drop = qtys[i - 1] - qtys[i]
-        if drop > max_single_drop:
-            max_single_drop = drop
-    # If one single drop is >50% of total decline → it's a pull, not eating
-    if max_single_drop / total_decline > gradual_threshold:
-        return False
-    return True
+    if len(qtys) < 20:
+        return 0.0
+    max_qty = max(qtys)
+    if max_qty <= 0:
+        return 0.0
+    return max(0.0, (max_qty - qtys[-1]) / max_qty)

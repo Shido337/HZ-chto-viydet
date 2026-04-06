@@ -29,8 +29,7 @@ load_dotenv()
 # Constants
 # ---------------------------------------------------------------------------
 REGIME_UPDATE_INTERVAL = 30  # seconds
-LOOP_INTERVAL = 0.1          # positions + pending checked at 100ms (matches depth WS update rate)
-SIGNAL_INTERVAL = 1.0        # new signal search every 1s (CPU-intensive, no need faster)
+LOOP_INTERVAL = 1.0
 MAX_CONSECUTIVE_ERRORS = 10
 MAX_SIGNALS_HISTORY = 200
 
@@ -65,7 +64,6 @@ class BotEngine:
 
         # Dynamic coin screening (replaces hardcoded symbols)
         self.screener = CoinScreener()
-        self.screener._client = self.client
         self.symbols: list[str] = []
         # Fallback if screening fails
         self._fallback_symbols: list[str] = [
@@ -82,7 +80,6 @@ class BotEngine:
         self._consecutive_errors = 0
         self._last_regime_update = 0.0
         self._last_status_log = 0.0
-        self._last_signal_search = 0.0
         self._tick_count = 0
         self._on_trade_close: Any = None  # callback for server WS
         self._on_signal: Any = None
@@ -242,11 +239,6 @@ class BotEngine:
 
         if self.risk.check_daily_limit():
             return
-
-        # Generate new signals — only every SIGNAL_INTERVAL seconds
-        if now - self._last_signal_search < SIGNAL_INTERVAL:
-            return
-        self._last_signal_search = now
 
         # Generate new signals
         for symbol in self.symbols:
@@ -700,7 +692,7 @@ class BotEngine:
 
             tickers = await self.client.get_all_tickers_24hr()
             book_tickers = await self.client.get_all_book_tickers()
-            selected = await self.screener.screen(tickers, book_tickers)
+            selected = self.screener.screen(tickers, book_tickers)
             if selected:
                 self.symbols = selected
             self._last_screen_time = time.time()

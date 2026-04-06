@@ -317,3 +317,7 @@ Files: core/coin_screener.py
 ## [2026-04-06 19:22 UTC]
 screener: change range 10-40% — only real movers get traded
 Files: core/coin_screener.py
+
+## [2026-04-06 19:25 UTC]
+revert: restore all logic to 880f649 (initial WallBounce state)
+Files: core/bot_engine.py, core/coin_screener.py, core/paper_trader.py, data/indicators.py, strategies/wall_bounce.py

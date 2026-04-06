@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,23 +8,20 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # Screening thresholds
 # ---------------------------------------------------------------------------
-MIN_QUOTE_VOLUME_24H = 100_000_000.0   # $100M min 24h USDT volume — ensures real liquidity
+MIN_QUOTE_VOLUME_24H = 100_000_000.0   # $100M min 24h USDT volume (was $50M — micro-caps have unreliable OB)
 MAX_SPREAD_PCT = 0.0005                  # 0.05% max bid-ask spread
-MIN_PRICE_CHANGE_PCT = 10.0             # min 10% daily move — only coins with real intraday volatility
-MAX_PRICE_CHANGE_PCT = 40.0             # max 40% daily move — allows hot movers, kills insane pumps
-MIN_TRADE_COUNT_24H = 300_000           # min 300k trades — real intraday scalping activity
-MAX_SYMBOLS = 20                        # top 20
+MIN_PRICE_CHANGE_PCT = 1.5              # min 1.5% daily move (abs) — filters dead coins
+MAX_PRICE_CHANGE_PCT = 12.0             # max 12% daily move (was 30% — kills pump-and-dump coins)
+MIN_TRADE_COUNT_24H = 150_000           # min 150k trades in 24h (was 100k — better microstructure)
+MAX_SYMBOLS = 10                        # top N to select (was 12 — quality > quantity)
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
-DEPTH_WALL_MULT = 5.0                   # level ≥5× avg = wall (for screening, relaxed vs live 8×)
 
-# Coins to always exclude:
-# BTC/ETH — $30-50B daily volume, walls are institutional and get absorbed silently.
-# No clean WB bounce at our scale. Too liquid for proportional wall detection.
-# BNB — Binance-native, unusual book dynamics.
-# DOTUSDT — sub-$50M volume, naturally below MIN_QUOTE_VOLUME_24H threshold anyway.
+# Coins to always exclude (stablecoins, true mega-caps that barely move at 25x)
+# SOL, DOGE, XRP, LINK are INCLUDED — they have $500M-$5B volume, tight spreads,
+# and real swing structure. At 25x leverage, SOL's 0.5% move = 12.5% return.
 EXCLUDED_SYMBOLS: set[str] = {
     "BTCUSDT", "ETHUSDT", "BNBUSDT",
-    "DOTUSDT",
+    "ADAUSDT", "AVAXUSDT", "DOTUSDT",
 }
 
 
@@ -37,48 +33,21 @@ class CoinScore:
     spread_pct: float         # bid-ask spread %
     price_change_pct: float   # abs 24h price change %
     trade_count: int          # 24h trade count
-    depth_score: float        # order book wall quality [0-1]
     composite_score: float    # final ranking score
 
 
-def _depth_imbalance_score(depth: dict[str, Any]) -> float:
-    """Score how "wall-rich" the depth20 snapshot is.
-
-    Returns 0-1: higher = more dominant walls (better for WB strategy).
-    """
-    bids = depth.get("bids", [])
-    asks = depth.get("asks", [])
-    if len(bids) < 5 or len(asks) < 5:
-        return 0.0
-    bid_qtys = [float(b[1]) for b in bids if float(b[1]) > 0]
-    ask_qtys = [float(a[1]) for a in asks if float(a[1]) > 0]
-    if not bid_qtys or not ask_qtys:
-        return 0.0
-    # Max-to-avg ratio: how dominant the biggest level is
-    bid_avg = sum(bid_qtys) / len(bid_qtys)
-    ask_avg = sum(ask_qtys) / len(ask_qtys)
-    bid_ratio = max(bid_qtys) / bid_avg if bid_avg > 0 else 0
-    ask_ratio = max(ask_qtys) / ask_avg if ask_avg > 0 else 0
-    best_ratio = max(bid_ratio, ask_ratio)
-    # Normalize: 5× = 0.5, 10× = 0.8, 20×+ = 1.0
-    if best_ratio < 2.0:
-        return 0.0
-    return min((best_ratio - 2.0) / 18.0, 1.0)
-
-
 class CoinScreener:
-    """Dynamic coin selection based on volume, spread, volatility and depth."""
+    """Dynamic coin selection based on volume, spread, and volatility."""
 
     def __init__(self) -> None:
         self._perpetual_symbols: set[str] = set()
-        self._client: Any = None  # BinanceClient, set by bot_engine
 
     def set_perpetual_symbols(self, symbols: list[dict[str, Any]]) -> None:
         """Cache valid PERPETUAL USDT-M symbol names from exchangeInfo."""
         self._perpetual_symbols = {s.get("symbol", "") for s in symbols}
         logger.info(f"CoinScreener: {len(self._perpetual_symbols)} perpetual pairs loaded")
 
-    async def screen(
+    def screen(
         self,
         tickers_24hr: list[dict[str, Any]],
         book_tickers: list[dict[str, Any]],
@@ -138,11 +107,10 @@ class CoinScreener:
             trade_score = min(trade_count / 1_000_000, 1.0)  # cap at 1M trades
 
             composite = (
-                vol_score * 0.25           # volume weight
-                + spread_score * 0.20      # spread weight
-                + vol_score_change * 0.20  # volatility weight
-                + trade_score * 0.15       # activity weight
-                # depth_score added after fetch below
+                vol_score * 0.30           # volume weight
+                + spread_score * 0.25      # spread weight
+                + vol_score_change * 0.25  # volatility weight
+                + trade_score * 0.20       # activity weight
             )
 
             candidates.append(CoinScore(
@@ -151,24 +119,8 @@ class CoinScreener:
                 spread_pct=spread_pct,
                 price_change_pct=price_change_pct,
                 trade_count=trade_count,
-                depth_score=0.0,
                 composite_score=composite,
             ))
-
-        # Fetch depth for top candidates and add depth_score (0.20 weight)
-        # Limit to top 25 by pre-score to avoid excessive API calls
-        candidates.sort(key=lambda c: c.composite_score, reverse=True)
-        depth_candidates = candidates[:25]
-        if self._client and depth_candidates:
-            depth_tasks = [
-                self._client.get_depth(c.symbol, limit=20)
-                for c in depth_candidates
-            ]
-            depths = await asyncio.gather(*depth_tasks, return_exceptions=True)
-            for c, d in zip(depth_candidates, depths):
-                if isinstance(d, dict):
-                    c.depth_score = _depth_imbalance_score(d)
-                c.composite_score += c.depth_score * 0.20
 
         # Sort by composite score descending, pick top N
         candidates.sort(key=lambda c: c.composite_score, reverse=True)
@@ -186,7 +138,6 @@ class CoinScreener:
                     f"spread={c.spread_pct*100:.4f}% "
                     f"change={c.price_change_pct:.1f}% "
                     f"trades={c.trade_count/1000:.0f}k "
-                    f"depth={c.depth_score:.2f} "
                     f"score={c.composite_score:.3f}",
                 )
         else:
