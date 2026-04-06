@@ -13,7 +13,7 @@ MAX_SPREAD_PCT = 0.0015                  # 0.15% max bid-ask spread
 MIN_PRICE_CHANGE_PCT = 5.0              # min 5% daily move
 MAX_PRICE_CHANGE_PCT = 50.0             # max 50% daily move
 MIN_TRADE_COUNT_24H = 0                 # no trade count filter
-MAX_SYMBOLS = 10                        # top N to select (was 12 — quality > quantity)
+MAX_SYMBOLS = 12                        # top N to select (was 12 — quality > quantity)
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
 
 # Coins to always exclude (stablecoins, true mega-caps that barely move at 25x)

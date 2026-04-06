@@ -41,3 +41,7 @@ Files: data/cache.py, strategies/wall_bounce.py
 ## [2026-04-06 23:37 UTC]
 fix: remove regime direction block in CB — allows SHORT in BULL and LONG in BEAR
 Files: strategies/continuation_break.py
+
+## [2026-04-06 23:40 UTC]
+screener: MAX_SYMBOLS 10->12
+Files: core/coin_screener.py
