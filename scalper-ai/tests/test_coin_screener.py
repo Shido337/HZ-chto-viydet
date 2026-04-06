@@ -53,7 +53,8 @@ class TestCoinScreener:
         assert result == []
 
     def test_excludes_large_cap(self) -> None:
-        for sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT"]:
+        # SOLUSDT is intentionally allowed (high volume, tight spread, real structure)
+        for sym in ["BTCUSDT", "ETHUSDT", "BNBUSDT"]:
             tickers = [_make_ticker(sym)]
             books = [_make_book(sym)]
             result = self.screener.screen(tickers, books)
@@ -92,7 +93,7 @@ class TestCoinScreener:
 
     def test_ranks_by_composite_score(self) -> None:
         tickers = [
-            _make_ticker("LOWUSDT", quote_volume=60_000_000, price_change_pct=2.0),
+            _make_ticker("LOWUSDT", quote_volume=110_000_000, price_change_pct=2.0),
             _make_ticker("HIGHUSDT", quote_volume=300_000_000, price_change_pct=10.0,
                          trade_count=800_000),
         ]

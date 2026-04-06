@@ -337,3 +337,7 @@ Files: data/indicators.py, data/cache.py, core/bot_engine.py, strategies/wall_bo
 ## [2026-04-06 20:20 UTC]
 WB: CScalp filters — round number, wall_stable 5s, level touches, VEI; limit entry for bounce
 Files: data/indicators.py, strategies/wall_bounce.py
+
+## [2026-04-06 20:22 UTC]
+tests: fix coin_screener tests for updated EXCLUDED_SYMBOLS and MIN_QUOTE_VOLUME thresholds
+Files: tests/test_coin_screener.py
