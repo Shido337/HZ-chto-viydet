@@ -243,3 +243,7 @@ Files: scalper-ai/core/paper_trader.py
 ## [2026-04-05 23:06 UTC]
 CB: SWING_LOOKBACK 8->15 (45min structure), BODY_MIN_PCT 0.1%->0.4%, BREAK_CLEARANCE_PCT 0.15% (no false tick-breaks)
 Files: scalper-ai/strategies/continuation_break.py
+
+## [2026-04-06 10:42 UTC]
+WB bounce: remove CVD hard gate, fix scoring (wall-based thesis), add wall-miss grace period (3 checks), 5s min hold before wall_absorbed exit, separate BOUNCE_MIN_SCORE=0.55
+Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py, core/coin_screener.py, core/bot_engine.py, data/indicators.py, exchange/binance_client.py

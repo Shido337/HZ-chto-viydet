@@ -64,6 +64,7 @@ class BotEngine:
 
         # Dynamic coin screening (replaces hardcoded symbols)
         self.screener = CoinScreener()
+        self.screener._client = self.client
         self.symbols: list[str] = []
         # Fallback if screening fails
         self._fallback_symbols: list[str] = [
@@ -692,7 +693,7 @@ class BotEngine:
 
             tickers = await self.client.get_all_tickers_24hr()
             book_tickers = await self.client.get_all_book_tickers()
-            selected = self.screener.screen(tickers, book_tickers)
+            selected = await self.screener.screen(tickers, book_tickers)
             if selected:
                 self.symbols = selected
             self._last_screen_time = time.time()

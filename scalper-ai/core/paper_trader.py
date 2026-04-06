@@ -34,6 +34,9 @@ CVD_EXIT_MIN_HOLD_SEC = 120   # hold at least 2 min before CVD exit
 MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
 PENDING_TIMEOUT = 60  # seconds — give pullback entries more time to fill
+PENDING_WB_TIMEOUT = 30  # WB bounce limit: wall edge is short-lived, cancel sooner
+WALL_EATEN_EXIT_PCT = 0.25  # exit bounce if ≥25% of wall qty absorbed
+WALL_MISS_GRACE = 3  # cancel WB only after N consecutive wall-miss checks
 
 
 class PaperTrader:
@@ -43,6 +46,8 @@ class PaperTrader:
         self.cache = cache
         self.positions: dict[str, Position] = {}
         self.pending: dict[str, PendingOrder] = {}
+        self._wall_miss: dict[str, int] = {}  # symbol → consecutive wall-miss count
+        self._pos_wall_miss: dict[str, int] = {}  # same for open positions
 
     @property
     def open_count(self) -> int:
@@ -65,7 +70,10 @@ class PaperTrader:
             return None
 
         snap = self.cache.get_snapshot(signal.symbol)
-        is_market = signal.setup_type in (SetupType.EARLY_MOMENTUM, SetupType.WALL_BOUNCE)
+        is_market = (
+            signal.setup_type == SetupType.EARLY_MOMENTUM
+            or (signal.setup_type == SetupType.WALL_BOUNCE and signal.wall_ref_price == 0.0)
+        )
 
         if is_market:
             # Market entry: LONG at ask, SHORT at bid (taker)
@@ -132,7 +140,10 @@ class PaperTrader:
             tp_price=tp,
             size_usdt=notional,
             quantity=notional / entry if entry else 0,
-            expiry=time.time() + PENDING_TIMEOUT,
+            expiry=time.time() + (
+                PENDING_WB_TIMEOUT if signal.setup_type == SetupType.WALL_BOUNCE
+                else PENDING_TIMEOUT
+            ),
         )
         self.pending[signal.symbol] = order
         logger.info(
@@ -183,6 +194,7 @@ class PaperTrader:
                 )
                 self.positions[symbol] = pos
                 del self.pending[symbol]
+                self._wall_miss.pop(symbol, None)
                 filled.append(pos)
                 logger.info(
                     f"[PAPER] Limit FILLED {order.direction.value} {symbol} "
@@ -190,11 +202,44 @@ class PaperTrader:
                 )
             elif now >= order.expiry:
                 del self.pending[symbol]
+                self._wall_miss.pop(symbol, None)
                 expired.append(order)
+                timeout = PENDING_WB_TIMEOUT if order.setup_type == SetupType.WALL_BOUNCE else PENDING_TIMEOUT
                 logger.info(
                     f"[PAPER] Limit EXPIRED {symbol} "
-                    f"@ {order.entry_price:.6f} (not filled in {PENDING_TIMEOUT}s)",
+                    f"@ {order.entry_price:.6f} (not filled in {timeout}s)",
                 )
+
+            # WB bounce: cancel if wall level absent for N consecutive checks
+            elif (
+                order.setup_type == SetupType.WALL_BOUNCE
+                and order.signal.wall_ref_price > 0
+            ):
+                from data.indicators import find_wall as _find_wall
+                snap2 = self.cache.get_snapshot(symbol)
+                if order.direction == Direction.LONG:
+                    wall = _find_wall(snap2.depth_bids)
+                else:
+                    wall = _find_wall(snap2.depth_asks)
+                wall_ok = (
+                    wall is not None
+                    and abs(wall[0] - order.signal.wall_ref_price)
+                    / order.signal.wall_ref_price < 0.003
+                )
+                if wall_ok:
+                    self._wall_miss.pop(symbol, None)
+                else:
+                    miss = self._wall_miss.get(symbol, 0) + 1
+                    self._wall_miss[symbol] = miss
+                    if miss >= WALL_MISS_GRACE:
+                        del self.pending[symbol]
+                        self._wall_miss.pop(symbol, None)
+                        expired.append(order)
+                        logger.info(
+                            f"[PAPER] WB CANCELLED {symbol} "
+                            f"wall {order.signal.wall_ref_price:.6f} disappeared "
+                            f"({miss} consecutive misses)",
+                        )
 
         return filled, expired
 
@@ -206,6 +251,7 @@ class PaperTrader:
         pos = self.positions.pop(symbol, None)
         if pos is None:
             return None
+        self._pos_wall_miss.pop(symbol, None)
         pos.exit_price = price
         pos.current_pnl = self._calc_pnl(pos, price, reason)
         logger.info(
@@ -229,6 +275,29 @@ class PaperTrader:
             self._check_breakeven(pos, snap.price, ap)
             self._check_trailing(pos, snap.price, ap)
             exit_result = self._check_exits(pos, snap)
+            # Wall-disappearance check for WB bounce (needs self for miss counter)
+            if (
+                exit_result is None
+                and pos.setup_type == SetupType.WALL_BOUNCE
+                and pos.signal.wall_ref_price > 0
+                and (time.time() - pos.opened_at) >= 5
+            ):
+                from data.indicators import find_wall
+                is_long = pos.direction == Direction.LONG
+                depth_levels = snap.depth_bids if is_long else snap.depth_asks
+                wall = find_wall(depth_levels)
+                wall_ref = pos.signal.wall_ref_price
+                wall_ok = (
+                    wall is not None
+                    and abs(wall[0] - wall_ref) / wall_ref < 0.003
+                )
+                if wall_ok:
+                    self._pos_wall_miss.pop(symbol, None)
+                else:
+                    miss = self._pos_wall_miss.get(symbol, 0) + 1
+                    self._pos_wall_miss[symbol] = miss
+                    if miss >= WALL_MISS_GRACE:
+                        exit_result = ("wall_absorbed", snap.price)
             if exit_result:
                 reason, exit_price = exit_result
                 p = self.close_position(symbol, exit_price, reason)
@@ -312,6 +381,19 @@ class PaperTrader:
             return ("tp_hit", pos.tp_price)
         if not is_long and price <= pos.tp_price:
             return ("tp_hit", pos.tp_price)
+        # Wall absorbed — close WB bounce if wall qty eaten significantly
+        # Grace: wait ≥5s after entry so pre-existing absorption doesn't insta-close
+        if (
+            pos.setup_type == SetupType.WALL_BOUNCE
+            and pos.signal.wall_ref_price > 0
+            and elapsed_sec >= 5
+        ):
+            from data.indicators import wall_absorption_pct
+            wall_ref = pos.signal.wall_ref_price
+            side = "bid" if is_long else "ask"
+            abs_pct = wall_absorption_pct(snap.wall_history, wall_ref, side)
+            if abs_pct >= WALL_EATEN_EXIT_PCT:
+                return ("wall_absorbed", price)
         # Stale exit: losing >0.5% after 4 min — cut deep losers early
         if not in_profit and elapsed_min >= STALE_EXIT_MINUTES:
             loss_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
@@ -353,7 +435,10 @@ class PaperTrader:
         else:
             pnl = (pos.entry_price - price) / pos.entry_price * pos.size_usdt
         # Entry: limit = maker, market (EM) = taker
-        is_market_entry = pos.setup_type in (SetupType.EARLY_MOMENTUM, SetupType.WALL_BOUNCE)
+        is_market_entry = (
+            pos.setup_type == SetupType.EARLY_MOMENTUM
+            or (pos.setup_type == SetupType.WALL_BOUNCE and pos.signal.wall_ref_price == 0.0)
+        )
         entry_fee = pos.size_usdt * (TAKER_FEE if is_market_entry else MAKER_FEE)
         # Exit: TP = limit (maker), rest = market (taker)
         if reason == "tp_hit":

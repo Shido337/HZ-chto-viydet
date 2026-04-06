@@ -237,6 +237,14 @@ class BinanceClient:
             and s.get("status") == "TRADING"
         ]
 
+    async def get_depth(self, symbol: str, limit: int = 20) -> dict[str, Any]:
+        """GET /fapi/v1/depth — weight 5 (limit≤50)."""
+        data = await self._request(
+            "GET", "/fapi/v1/depth",
+            params={"symbol": symbol, "limit": limit},
+        )
+        return data if isinstance(data, dict) else {}
+
 
 # ---------------------------------------------------------------------------
 # Helpers

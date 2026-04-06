@@ -19,7 +19,7 @@ ranging/low-vol but is allowed everywhere.
 from __future__ import annotations
 
 from data.cache import MarketRegime, MarketSnapshot
-from data.indicators import find_wall, order_book_imbalance, wall_absorption_pct
+from data.indicators import find_wall, order_book_imbalance, wall_absorption_pct, wall_is_eaten
 from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy
 
@@ -27,13 +27,15 @@ from strategies.base_strategy import BaseStrategy
 # Strategy constants
 # ---------------------------------------------------------------------------
 BOUNCE_DIST_PCT: float = 0.008    # price within 0.8 % of wall (max proximity)
-MIN_BOUNCE_DIST_PCT: float = 0.003  # wall must be ≥0.3 % from price (no spread noise)
-ABSORPTION_PCT: float = 0.40      # ≥40 % wall qty absorbed = active absorption
+MIN_BOUNCE_DIST_PCT: float = 0.0002  # wall must be ≥0.02 % from price (tiny buffer vs rounding)
+ABSORPTION_PCT: float = 0.30      # ≥30 % wall qty eaten (+ wall_is_eaten + price past wall)
 MIN_CVD_BUILD: float = 500.0      # minimum |CVD delta 1m| for absorption (prev 150)
 SL_BUFFER_PCT: float = 0.002      # 0.2 % buffer beyond wall for bounce SL
+ENTRY_BEFORE_WALL_PCT: float = 0.0005  # limit 0.05 % before wall (fills sooner)
 MAX_SL_PCT: float = 0.008         # hard cap: never risk more than 0.8 %
 MIN_RR: float = 1.5               # minimum reward-to-risk ratio
-WB_MIN_SCORE: float = 0.70        # WB-specific threshold (higher than global 0.65)
+WB_MIN_SCORE: float = 0.70        # absorption threshold (higher conviction)
+BOUNCE_MIN_SCORE: float = 0.55    # bounce threshold (wall is primary thesis)
 
 
 class WallBounce(BaseStrategy):
@@ -77,46 +79,54 @@ class WallBounce(BaseStrategy):
     ) -> Signal | None:
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
 
-        # LONG: ask wall being absorbed by buyers (price below wall, buyers pressing up)
+        # LONG: ask wall being eaten by buyers → price must already be AT or PAST the wall
         if ask_wall:
             wp, wq = ask_wall
-            if snap.price < wp:
-                abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
-                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m >= MIN_CVD_BUILD:
-                    entry = snap.ask
-                    atr = ap.atr_value
-                    raw_sl = entry - max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 - 0.003)
-                    sl = max(raw_sl, entry * (1 - MAX_SL_PCT))
-                    sl_dist = (entry - sl) / entry
-                    if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
-                        return None
-                    tp = wp + atr * 1.5 if atr > 0 else entry + (entry - sl) * MIN_RR
-                    if tp <= entry:
-                        tp = entry + (entry - sl) * MIN_RR
-                    return self._build(
-                        snap, Direction.LONG, entry, sl, tp,
-                        ob, abs_pct, "absorption", ap, ml_boost, wq,
-                    )
+            abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
+            if (
+                abs_pct >= ABSORPTION_PCT
+                and snap.cvd_delta_1m >= MIN_CVD_BUILD
+                and snap.price >= wp  # price already broke through wall
+                and wall_is_eaten(snap.wall_history, wp, "ask")  # gradual, not spoofed
+            ):
+                entry = snap.ask
+                atr = ap.atr_value
+                raw_sl = wp * (1 - SL_BUFFER_PCT)  # SL just below the eaten wall
+                sl = max(raw_sl, entry * (1 - MAX_SL_PCT))
+                sl_dist = (entry - sl) / entry
+                if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
+                    return None
+                tp = entry + atr * 1.5 if atr > 0 else entry + (entry - sl) * MIN_RR
+                if tp <= entry:
+                    tp = entry + (entry - sl) * MIN_RR
+                return self._build(
+                    snap, Direction.LONG, entry, sl, tp,
+                    ob, abs_pct, "absorption", ap, ml_boost, wq,
+                )
 
-        # SHORT: bid wall being absorbed by sellers (price above wall, sellers pressing down)
+        # SHORT: bid wall being eaten by sellers → price must already be AT or BELOW the wall
         if bid_wall:
             wp, wq = bid_wall
-            if snap.price > wp:
-                abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
-                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m <= -MIN_CVD_BUILD:
-                    entry = snap.bid
-                    atr = ap.atr_value
-                    raw_sl = entry + max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 + 0.003)
-                    sl = min(raw_sl, entry * (1 + MAX_SL_PCT))
-                    sl_dist = (sl - entry) / entry
-                    if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
-                        return None
-                    tp = wp - atr * 1.5 if atr > 0 else entry - (sl - entry) * MIN_RR
-                    if tp >= entry:
-                        tp = entry - (sl - entry) * MIN_RR
-                    return self._build(
-                        snap, Direction.SHORT, entry, sl, tp,
-                        ob, abs_pct, "absorption", ap, ml_boost, wq,
+            abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
+            if (
+                abs_pct >= ABSORPTION_PCT
+                and snap.cvd_delta_1m <= -MIN_CVD_BUILD
+                and snap.price <= wp  # price already broke through wall
+                and wall_is_eaten(snap.wall_history, wp, "bid")  # gradual, not spoofed
+            ):
+                entry = snap.bid
+                atr = ap.atr_value
+                raw_sl = wp * (1 + SL_BUFFER_PCT)  # SL just above the eaten wall
+                sl = min(raw_sl, entry * (1 + MAX_SL_PCT))
+                sl_dist = (sl - entry) / entry
+                if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
+                    return None
+                tp = entry - atr * 1.5 if atr > 0 else entry - (sl - entry) * MIN_RR
+                if tp >= entry:
+                    tp = entry - (sl - entry) * MIN_RR
+                return self._build(
+                    snap, Direction.SHORT, entry, sl, tp,
+                    ob, abs_pct, "absorption", ap, ml_boost, wq,
                     )
 
         return None
@@ -129,12 +139,9 @@ class WallBounce(BaseStrategy):
         ap,
         ml_boost: float,
     ) -> Signal | None:
-        # For BOUNCE use depth levels 1+ (skip top-of-book = spread noise).
-        # Level 0 is the best bid/ask which is always within spread distance.
-        bounce_bids = snap.depth_bids[1:] if len(snap.depth_bids) > 1 else ()
-        bounce_asks = snap.depth_asks[1:] if len(snap.depth_asks) > 1 else ()
-        bid_wall = find_wall(bounce_bids)   # override param with spread-filtered version
-        ask_wall = find_wall(bounce_asks)
+        # Find walls in depth levels — MIN_BOUNCE_DIST_PCT filters spread noise
+        bid_wall = find_wall(snap.depth_bids)
+        ask_wall = find_wall(snap.depth_asks)
 
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
 
@@ -142,35 +149,38 @@ class WallBounce(BaseStrategy):
         if bid_wall:
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
-            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT:
-                if snap.cvd_delta_1m >= 0 and ob >= 0.48:
-                    entry = snap.ask
-                    sl = wp * (1 - SL_BUFFER_PCT)
-                    sl_dist = (entry - sl) / entry
-                    if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
-                        return None
-                    tp = entry + (entry - sl) * ap.tp_rr
-                    return self._build(
-                        snap, Direction.LONG, entry, sl, tp,
-                        ob, 0.0, "bounce", ap, ml_boost, wq,
-                    )
+            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT and ob >= 0.45:
+                # Wall is the thesis — CVD direction handled by scoring, not hard gate.
+                # Limit entry slightly ABOVE the wall — fills as price approaches.
+                # If wall gets eaten → paper_trader closes and absorption re-enters.
+                entry = wp * (1 + ENTRY_BEFORE_WALL_PCT)
+                sl = wp * (1 - SL_BUFFER_PCT)
+                sl_dist = (entry - sl) / entry
+                if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
+                    return None
+                tp = entry + (entry - sl) * ap.tp_rr
+                return self._build(
+                    snap, Direction.LONG, entry, sl, tp,
+                    ob, 0.0, "bounce", ap, ml_boost, wq,
+                    wall_ref_price=wp,
+                )
 
         # SHORT: large ask wall above, price approaching from below → expect bounce down
         if ask_wall:
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
-            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT:
-                if snap.cvd_delta_1m <= 0 and ob <= 0.52:
-                    entry = snap.bid
-                    sl = wp * (1 + SL_BUFFER_PCT)
-                    sl_dist = (sl - entry) / entry
-                    if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
-                        return None
-                    tp = entry - (sl - entry) * ap.tp_rr
-                    return self._build(
-                        snap, Direction.SHORT, entry, sl, tp,
-                        ob, 0.0, "bounce", ap, ml_boost, wq,
-                    )
+            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT and ob <= 0.55:
+                entry = wp * (1 - ENTRY_BEFORE_WALL_PCT)
+                sl = wp * (1 + SL_BUFFER_PCT)
+                sl_dist = (sl - entry) / entry
+                if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
+                    return None
+                tp = entry - (sl - entry) * ap.tp_rr
+                return self._build(
+                    snap, Direction.SHORT, entry, sl, tp,
+                    ob, 0.0, "bounce", ap, ml_boost, wq,
+                    wall_ref_price=wp,
+                )
 
         return None
 
@@ -191,6 +201,7 @@ class WallBounce(BaseStrategy):
         ap,
         ml_boost: float,
         wall_qty: float,  # noqa: ARG002  (reserved for future scaling)
+        wall_ref_price: float = 0.0,  # bounce: wall level for limit entry + validity
     ) -> Signal | None:
         if entry <= 0 or sl <= 0 or tp <= 0:
             return None
@@ -208,17 +219,21 @@ class WallBounce(BaseStrategy):
             return None
 
         # -- Score breakdown -------------------------------------------------
-        # Absorption: CVD alignment is primary evidence
         if mode == "absorption":
+            # Absorption: CVD alignment is primary evidence
             cvd_raw = min(abs(snap.cvd_delta_1m) / 1000, 1.0)
+            cvd_score = cvd_raw * 0.25
         else:
-            cvd_raw = min(abs(snap.cvd_delta_1m) / 500, 0.5)
-        cvd_score = cvd_raw * 0.25
+            # Bounce: wall is the thesis. CVD direction is a bonus, not the driver.
+            # Base 0.15 for confirmed wall. Aligned CVD adds up to 0.10, against adds 0.05.
+            cvd_mag = min(abs(snap.cvd_delta_1m) / 1000, 1.0)
+            cvd_aligned = (snap.cvd_delta_1m >= 0) == (d == Direction.LONG)
+            cvd_score = 0.15 + cvd_mag * (0.10 if cvd_aligned else 0.05)
 
         ob_directional = ob if d == Direction.LONG else (1.0 - ob)
         ob_score = ob_directional * 0.20
 
-        vol_score = 0.10 if mode == "absorption" else 0.07
+        vol_score = 0.10
 
         # Structure: absorbed fraction is a proxy for "how real" the signal is
         structure_score = min(abs_pct + 0.30, 1.0) * 0.15 if mode == "absorption" else 0.10
@@ -241,7 +256,8 @@ class WallBounce(BaseStrategy):
             ml_boost=min(ml_boost * 0.10, 0.10),
         )
         score = self.score_components(comp)
-        if score < WB_MIN_SCORE:
+        min_score = WB_MIN_SCORE if mode == "absorption" else BOUNCE_MIN_SCORE
+        if score < min_score:
             return None
 
         return Signal(
@@ -253,4 +269,5 @@ class WallBounce(BaseStrategy):
             entry_price=entry,
             sl_price=sl,
             tp_price=tp,
+            wall_ref_price=wall_ref_price,
         )
