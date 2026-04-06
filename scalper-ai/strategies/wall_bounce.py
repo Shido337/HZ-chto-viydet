@@ -26,12 +26,14 @@ from strategies.base_strategy import BaseStrategy
 # ---------------------------------------------------------------------------
 # Strategy constants
 # ---------------------------------------------------------------------------
-BOUNCE_DIST_PCT: float = 0.003    # price within 0.3 % of wall to qualify
+BOUNCE_DIST_PCT: float = 0.008    # price within 0.8 % of wall (max proximity)
+MIN_BOUNCE_DIST_PCT: float = 0.003  # wall must be ≥0.3 % from price (no spread noise)
 ABSORPTION_PCT: float = 0.40      # ≥40 % wall qty absorbed = active absorption
-MIN_CVD_BUILD: float = 150.0      # minimum |CVD delta 1m| for absorption
+MIN_CVD_BUILD: float = 500.0      # minimum |CVD delta 1m| for absorption (prev 150)
 SL_BUFFER_PCT: float = 0.0008     # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float = 0.008         # hard cap: never risk more than 0.8 %
 MIN_RR: float = 1.5               # minimum reward-to-risk ratio
+WB_MIN_SCORE: float = 0.70        # WB-specific threshold (higher than global 0.65)
 
 
 class WallBounce(BaseStrategy):
@@ -51,6 +53,8 @@ class WallBounce(BaseStrategy):
             return None  # no significant wall on either side
 
         ap = snap.adaptive
+        if ap.atr_value <= 0:
+            return None  # ATR not yet computed — SL would be an unreliable fallback
 
         # Absorption has higher conviction — try it first
         sig = self._check_absorption(snap, bid_wall, ask_wall, ap, ml_boost)
@@ -125,13 +129,20 @@ class WallBounce(BaseStrategy):
         ap,
         ml_boost: float,
     ) -> Signal | None:
+        # For BOUNCE use depth levels 1+ (skip top-of-book = spread noise).
+        # Level 0 is the best bid/ask which is always within spread distance.
+        bounce_bids = snap.depth_bids[1:] if len(snap.depth_bids) > 1 else ()
+        bounce_asks = snap.depth_asks[1:] if len(snap.depth_asks) > 1 else ()
+        bid_wall = find_wall(bounce_bids)   # override param with spread-filtered version
+        ask_wall = find_wall(bounce_asks)
+
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
 
         # LONG: large bid wall below, price approaching from above → expect bounce
         if bid_wall:
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
-            if 0 < dist <= BOUNCE_DIST_PCT:
+            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT:
                 if snap.cvd_delta_1m >= 0 and ob >= 0.48:
                     entry = snap.ask
                     sl = wp * (1 - SL_BUFFER_PCT)
@@ -148,7 +159,7 @@ class WallBounce(BaseStrategy):
         if ask_wall:
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
-            if 0 < dist <= BOUNCE_DIST_PCT:
+            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT:
                 if snap.cvd_delta_1m <= 0 and ob <= 0.52:
                     entry = snap.bid
                     sl = wp * (1 + SL_BUFFER_PCT)
@@ -230,7 +241,7 @@ class WallBounce(BaseStrategy):
             ml_boost=min(ml_boost * 0.10, 0.10),
         )
         score = self.score_components(comp)
-        if score < ap.min_score:
+        if score < WB_MIN_SCORE:
             return None
 
         return Signal(
