@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import numpy as np
@@ -279,3 +280,77 @@ def wall_absorption_pct(
     if max_qty <= 0:
         return 0.0
     return max(0.0, (max_qty - qtys[-1]) / max_qty)
+
+
+def wall_on_round_number(price: float, tolerance: float = 0.001) -> bool:
+    """True if *price* sits at a psychologically round level (real wall).
+
+    CScalp rule: real walls stand on round numbers (22500, 84000, 130).
+    Spoofers place at irregular prices (16783, 131.37) and pull quickly.
+
+    Algorithm: price is "round" if it's an exact multiple of some unit that
+    is at least 0.1% of the price magnitude — meaning the price has a lot of
+    trailing zeros at that scale.
+
+    Examples:
+      wall_on_round_number(85000)  → True  (85000 = 17 × 5000)
+      wall_on_round_number(84500)  → True  (84500 = 169 × 500)
+      wall_on_round_number(84783)  → False (not divisible by anything ≥ 85)
+      wall_on_round_number(130.0)  → True  (130 = 13 × 10)
+      wall_on_round_number(131.37) → False (not divisible by anything ≥ 0.13)
+    """
+    if price <= 0:
+        return False
+    magnitude = 10 ** math.floor(math.log10(price))
+    # Check standard sub-divisions of the order of magnitude
+    for divisor in (1, 2, 4, 5, 10, 20, 25, 50, 100, 200, 500, 1000):
+        unit = magnitude / divisor
+        if unit <= 0:
+            continue
+        nearest = round(price / unit) * unit
+        if abs(price - nearest) / price <= tolerance:
+            return True
+    return False
+
+
+def count_level_touches(
+    klines: list[dict[str, Any]],
+    level: float,
+    touch_zone_pct: float = 0.002,
+    lookback: int = 200,
+) -> int:
+    """Count distinct price touches / tests of *level* in recent klines.
+
+    CScalp rule: a strong level has ≥2–3 touches.  Single-touch levels
+    are weak and may not hold.
+
+    A touch is counted when a candle's high or low enters the zone
+    [level×(1−touch_zone_pct), level×(1+touch_zone_pct)].
+    Consecutive candles in the zone count as ONE touch (de-duplicated).
+
+    Args:
+        klines:          list of OHLCV dicts with keys h/l.
+        level:           price level to test.
+        touch_zone_pct:  ±0.2% of level counts as "touched" (default).
+        lookback:        number of most-recent candles to inspect.
+
+    Returns:
+        Integer touch count (0 if insufficient data).
+    """
+    if not klines or level <= 0:
+        return 0
+    lo = level * (1 - touch_zone_pct)
+    hi = level * (1 + touch_zone_pct)
+    recent = klines[-lookback:]
+    touches = 0
+    in_zone = False
+    for c in recent:
+        candle_lo = c.get("l", 0.0)
+        candle_hi = c.get("h", 0.0)
+        hit = (candle_lo <= hi and candle_hi >= lo)
+        if hit and not in_zone:
+            touches += 1
+            in_zone = True
+        elif not hit:
+            in_zone = False
+    return touches

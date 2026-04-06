@@ -667,6 +667,8 @@ class BotEngine:
     def _init_symbols(self) -> None:
         for s in self.symbols:
             self.cache.init_symbol(s)
+        # BTCUSDT monitored as market leader / поводырь — not traded
+        self.cache.init_symbol("BTCUSDT")
 
     async def _start_ws(self, testnet: bool) -> None:
         self._ws = BinanceWS(testnet=testnet)
@@ -678,6 +680,9 @@ class BotEngine:
             self._ws.subscribe(f"{sl}@bookTicker", self._make_book_handler(s))
             self._ws.subscribe(f"{sl}@aggTrade", self._make_agg_handler(s))
             self._ws.subscribe(f"{sl}@depth20@100ms", self._make_depth_handler(s))
+        # BTCUSDT — aggTrade for CVD tracking (used as market leader / поводырь in WallBounce)
+        self._ws.subscribe("btcusdt@aggTrade", self._make_agg_handler("BTCUSDT"))
+        self._ws.subscribe("btcusdt@kline_1m", self._make_kline_handler("BTCUSDT", "1m"))
         await self._ws.start()
 
     # -- dynamic coin screening ---------------------------------------------

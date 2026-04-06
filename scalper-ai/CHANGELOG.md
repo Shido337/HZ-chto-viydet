@@ -321,3 +321,7 @@ Files: core/coin_screener.py
 ## [2026-04-06 19:25 UTC]
 revert: restore all logic to 880f649 (initial WallBounce state)
 Files: core/bot_engine.py, core/coin_screener.py, core/paper_trader.py, data/indicators.py, strategies/wall_bounce.py
+
+## [2026-04-06 19:48 UTC]
+WB: CScalp filters — round number, level touches (>=2), BTC leader (povodyr)
+Files: data/indicators.py, data/cache.py, core/bot_engine.py, strategies/wall_bounce.py
