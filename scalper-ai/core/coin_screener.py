@@ -9,12 +9,12 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # Screening thresholds
 # ---------------------------------------------------------------------------
-MIN_QUOTE_VOLUME_24H = 50_000_000.0    # $50M min 24h USDT volume (lowered for mid-caps with walls)
+MIN_QUOTE_VOLUME_24H = 100_000_000.0   # $100M min 24h USDT volume — ensures real liquidity
 MAX_SPREAD_PCT = 0.0005                  # 0.05% max bid-ask spread
-MIN_PRICE_CHANGE_PCT = 1.0              # min 1.0% daily move (abs) — 1.5% cut BTC/ETH on flat days
-MAX_PRICE_CHANGE_PCT = 12.0             # max 12% daily move (was 30% — kills pump-and-dump coins)
-MIN_TRADE_COUNT_24H = 100_000           # min 100k trades (lowered for mid-caps)
-MAX_SYMBOLS = 20                        # top 20 — BTC/ETH added back, wider coverage
+MIN_PRICE_CHANGE_PCT = 2.0              # min 2% daily move — requires real volatility, kills dead coins
+MAX_PRICE_CHANGE_PCT = 18.0             # max 18% daily move — allows volatile mid-caps, still kills pumps
+MIN_TRADE_COUNT_24H = 300_000           # min 300k trades — real intraday scalping activity
+MAX_SYMBOLS = 20                        # top 20
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
 DEPTH_WALL_MULT = 5.0                   # level ≥5× avg = wall (for screening, relaxed vs live 8×)
 

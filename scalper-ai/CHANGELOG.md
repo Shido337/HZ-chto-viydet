@@ -309,3 +309,7 @@ Files: core/coin_screener.py
 ## [2026-04-06 19:08 UTC]
 screener: remove ADAUSDT from excluded — $205M vol, 512k trades, passes all thresholds (data-verified)
 Files: core/coin_screener.py
+
+## [2026-04-06 19:19 UTC]
+screener: tighten quality thresholds — vol $100M, change 2-18%, trades 300k (data-verified against live Binance)
+Files: core/coin_screener.py
