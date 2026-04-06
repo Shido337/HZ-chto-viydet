@@ -251,3 +251,7 @@ Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py
 ## [2026-04-06 11:25 UTC]
 WB: fix wall validity — direct qty check (wall_qty_at_price), wall_stable 10s filter, remove wall_absorption_pct from exits, fix wall_absorption_pct latest-by-ts bug, WALL_MULTIPLIER=5.0, wall_absorbed only when losing
 Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py, data/indicators.py, data/cache.py
+
+## [2026-04-06 12:17 UTC]
+WB: regime filter (no LONG in BEAR/no SHORT in BULL), wall_stable spoof filter, wall_qty_at_price, WALL_MULT=5, wall_absorbed only when losing
+Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py, data/indicators.py, data/cache.py
