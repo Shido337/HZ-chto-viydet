@@ -25,3 +25,7 @@ Files: data/indicators.py, data/cache.py
 ## [2026-04-06 23:10 UTC]
 fix: WallBounce absorption blocked in counter-trend regime; ABSORPTION_PCT 0.40->0.55
 Files: strategies/wall_bounce.py
+
+## [2026-04-06 23:16 UTC]
+fix: stable log-scale bucketing; revert direction block in WallBounce
+Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py

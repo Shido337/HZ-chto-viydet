@@ -227,22 +227,24 @@ BUCKET_PCT = 0.001
 
 def bucket_levels(
     levels: list[tuple[float, float]],
-    mid_price: float,
     bucket_pct: float = BUCKET_PCT,
 ) -> list[tuple[float, float]]:
-    """Aggregate nearby price levels into percentage-based buckets.
+    """Aggregate nearby price levels using log-scale stable bucketing.
 
-    All levels within the same *bucket_pct*-wide bin are merged: quantities are
-    summed and the representative price is taken from the highest-qty level in
-    the bucket.  This prevents individual tiny ticks from masking real clusters.
+    Uses floor(log_{1+bucket_pct}(price)) as the bucket index.  This gives
+    stable integer IDs regardless of the current mid_price — levels within
+    *bucket_pct* of each other always land in the same bucket every tick.
+    Quantities are summed; representative price = highest-qty tick in bucket.
     """
-    if bucket_pct <= 0 or mid_price <= 0 or not levels:
+    if bucket_pct <= 0 or not levels:
         return list(levels)
-    bucket_width = mid_price * bucket_pct
+    log_step = math.log(1.0 + bucket_pct)
     totals: dict[int, float] = {}
     best: dict[int, tuple[float, float]] = {}  # idx → (best_qty, best_price)
     for price, qty in levels:
-        idx = int(price / bucket_width)
+        if price <= 0:
+            continue
+        idx = int(math.log(price) / log_step)
         totals[idx] = totals.get(idx, 0.0) + qty
         prev_best = best.get(idx, (0.0, price))
         if qty > prev_best[0]:
@@ -269,8 +271,8 @@ def find_wall(
         lo = mid_price * (1.0 - max_dist_pct)
         hi = mid_price * (1.0 + max_dist_pct)
         levels = [(p, q) for p, q in levels if lo <= p <= hi]
-    # Aggregate nearby ticks into buckets before computing avg
-    levels = bucket_levels(list(levels), mid_price, bucket_pct)
+    # Aggregate nearby ticks into stable log-scale buckets before computing avg
+    levels = bucket_levels(list(levels), bucket_pct)
     if len(levels) < 3:
         return None
     qtys = [q for _, q in levels if q > 0]

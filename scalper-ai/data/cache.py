@@ -282,8 +282,8 @@ class MarketCache:
             lo = mid_price * (1.0 - max_dist_pct)
             hi = mid_price * (1.0 + max_dist_pct)
             levels = [(p, q) for p, q in levels if lo <= p <= hi]
-        # Aggregate adjacent ticks into percentage-based buckets before scoring
-        levels = bucket_levels(levels, mid_price, BUCKET_PCT)
+        # Aggregate adjacent ticks into stable log-scale buckets before scoring
+        levels = bucket_levels(levels, BUCKET_PCT)
         if len(levels) < 3:
             return 0.0, 0.0
         qtys = [q for _, q in levels if q > 0]

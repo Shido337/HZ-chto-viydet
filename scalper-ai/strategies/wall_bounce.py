@@ -118,7 +118,7 @@ class WallBounce(BaseStrategy):
             wp, wq = bid_wall
             if (snap.price > wp
                     and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)):
-                # round_number NOT required — a 40%+ absorbed wall proved itself real
+                # round_number NOT required — a 55%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m <= -MIN_CVD_BUILD:
                     entry = snap.bid
@@ -247,20 +247,10 @@ class WallBounce(BaseStrategy):
         structure_score = min(abs_pct + 0.30, 1.0) * 0.15 if mode == "absorption" else 0.10
 
         if mode == "absorption":
-            # Absorption is a with-trend play when regime strongly trending.
-            # Counter-trend absorption (e.g. SHORT in TRENDING_BULL) gets no
-            # regime bonus — the trend has momentum that can overwhelm a wall.
-            bull_trend = snap.regime == MarketRegime.TRENDING_BULL
-            bear_trend = snap.regime == MarketRegime.TRENDING_BEAR
-            aligned = (
-                (d == Direction.LONG and (bull_trend or snap.regime == MarketRegime.HIGH_VOL))
-                or (d == Direction.SHORT and (bear_trend or snap.regime == MarketRegime.HIGH_VOL))
-                or snap.regime in (MarketRegime.RANGING, MarketRegime.LOW_VOL)
+            regime_ok = snap.regime in (
+                MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
+                MarketRegime.HIGH_VOL,
             )
-            # Hard block: never take absorption shorts in a strong bull trend (or vice versa)
-            if (d == Direction.SHORT and bull_trend) or (d == Direction.LONG and bear_trend):
-                return None
-            regime_ok = aligned
         else:
             regime_ok = True  # bounce works in all regimes
         regime_score = 0.15 if regime_ok else 0.07
