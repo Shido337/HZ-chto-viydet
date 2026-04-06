@@ -13,7 +13,7 @@ from core.regime_classifier import RegimeClassifier
 from core.risk_manager import RiskManager
 from core.signal_generator import PendingOrder, Signal
 from core.coin_screener import CoinScreener, SCREENER_INTERVAL
-from data.cache import AdaptiveParams, MarketCache, MarketRegime
+from data.cache import AdaptiveParams, LocalOrderBook, MarketCache, MarketRegime
 from exchange.binance_client import BinanceClient
 from exchange.binance_ws import BinanceWS
 from exchange.order_executor import OrderExecutor
@@ -75,6 +75,7 @@ class BotEngine:
         self._user_ws: BinanceWS | None = None  # user data stream for order events
         self._listen_key: str = ""
         self._listen_key_task: asyncio.Task[None] | None = None
+        self._order_books: dict[str, LocalOrderBook] = {}  # full incremental order books
         self._running = False
         self._main_task: asyncio.Task[None] | None = None
         self._consecutive_errors = 0
@@ -669,6 +670,11 @@ class BotEngine:
             self.cache.init_symbol(s)
 
     async def _start_ws(self, testnet: bool) -> None:
+        # Fetch full depth snapshots (REST) before opening the WS so that
+        # the first diff events arrive after the LocalOrderBook is populated.
+        for s in self.symbols:
+            await self._fetch_depth_snapshot(s)
+
         self._ws = BinanceWS(testnet=testnet)
         for s in self.symbols:
             sl = s.lower()
@@ -677,7 +683,7 @@ class BotEngine:
             self._ws.subscribe(f"{sl}@kline_5m", self._make_kline_handler(s, "5m"))
             self._ws.subscribe(f"{sl}@bookTicker", self._make_book_handler(s))
             self._ws.subscribe(f"{sl}@aggTrade", self._make_agg_handler(s))
-            self._ws.subscribe(f"{sl}@depth20@100ms", self._make_depth_handler(s))
+            self._ws.subscribe(f"{sl}@depth@100ms", self._make_depth_handler(s))
         await self._ws.start()
 
     # -- dynamic coin screening ---------------------------------------------
@@ -790,12 +796,36 @@ class BotEngine:
             await self.cache.update_agg_trade(symbol, data)
         return handler
 
+    async def _fetch_depth_snapshot(self, symbol: str) -> None:
+        """Fetch REST depth snapshot and (re-)initialise the LocalOrderBook."""
+        try:
+            data = await self.client.get_depth(symbol, limit=500)
+            if not data or "lastUpdateId" not in data:
+                logger.warning(f"Empty depth snapshot for {symbol}")
+                return
+            ob = self._order_books.setdefault(symbol, LocalOrderBook())
+            ob.init_snapshot(data)
+            logger.debug(
+                f"Depth snapshot {symbol}: lastUpdateId={data['lastUpdateId']}, "
+                f"bids={len(data['bids'])}, asks={len(data['asks'])}"
+            )
+        except Exception:
+            logger.exception(f"Failed to fetch depth snapshot for {symbol}")
+
     def _make_depth_handler(self, symbol: str) -> Any:
         async def handler(data: dict[str, Any]) -> None:
-            raw_bids = data.get("bids") or data.get("b", [])
-            raw_asks = data.get("asks") or data.get("a", [])
-            bids = [(float(p), float(q)) for p, q in raw_bids if float(q) > 0]
-            asks = [(float(p), float(q)) for p, q in raw_asks if float(q) > 0]
+            ob = self._order_books.get(symbol)
+            if ob is None:
+                return
+            needs_resync = not ob.apply_diff(data)
+            if needs_resync:
+                logger.warning(f"Depth sequence gap for {symbol}, re-syncing...")
+                asyncio.create_task(self._fetch_depth_snapshot(symbol))
+                return
+            if not ob.initialized:
+                return
+            bids = ob.sorted_bids()
+            asks = ob.sorted_asks()
             await self.cache.update_depth(symbol, bids, asks)
         return handler
 

@@ -73,7 +73,7 @@ class TestCoinScreener:
         assert result == []
 
     def test_filters_extreme_volatility(self) -> None:
-        tickers = [_make_ticker("TOKENUSDT", price_change_pct=50.0)]  # above 40%
+        tickers = [_make_ticker("TOKENUSDT", price_change_pct=51.0)]  # above 50%
         books = [_make_book("TOKENUSDT")]
         result = self.screener.screen(tickers, books)
         assert result == []

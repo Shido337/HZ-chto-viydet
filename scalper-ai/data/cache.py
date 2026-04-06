@@ -111,8 +111,8 @@ class MarketSnapshot:
     klines_3m: tuple[dict[str, Any], ...] = ()
     klines_5m: tuple[dict[str, Any], ...] = ()
     agg_trades: tuple[dict[str, Any], ...] = ()
-    depth_bids: tuple[tuple[float, float], ...] = ()   # (price, qty) top 20 bids from @depth20
-    depth_asks: tuple[tuple[float, float], ...] = ()   # (price, qty) top 20 asks from @depth20
+    depth_bids: tuple[tuple[float, float], ...] = ()   # (price, qty) sorted bids from full order book
+    depth_asks: tuple[tuple[float, float], ...] = ()   # (price, qty) sorted asks from full order book
     wall_history: tuple[WallSnapshot, ...] = ()        # recent depth wall snapshots (300 × 100ms = 30s)
     stale: bool = False
     ts: float = 0.0
@@ -123,6 +123,78 @@ class MarketSnapshot:
 # ---------------------------------------------------------------------------
 MAX_KLINES = 500
 MAX_AGG_TRADES = 1000
+
+
+# ---------------------------------------------------------------------------
+# LocalOrderBook — full incremental order book per symbol
+# ---------------------------------------------------------------------------
+
+class LocalOrderBook:
+    """Full incremental order book maintained from @depth@100ms diff stream.
+
+    Usage:
+      1. Call init_snapshot(snapshot_dict) with REST /fapi/v1/depth response.
+      2. Call apply_diff(msg) for every @depth@100ms diff event.
+      3. Read sorted_bids() / sorted_asks() for wall detection.
+    """
+
+    MAX_BUFFER = 200  # diff events buffered while awaiting REST snapshot
+
+    def __init__(self) -> None:
+        self.bids: dict[float, float] = {}
+        self.asks: dict[float, float] = {}
+        self.last_update_id: int = 0
+        self.initialized: bool = False
+        self._buffer: list[dict[str, Any]] = []
+
+    def init_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """Populate book from REST depth snapshot and flush buffer."""
+        self.last_update_id = snapshot["lastUpdateId"]
+        self.bids = {float(p): float(q) for p, q in snapshot["bids"] if float(q) > 0}
+        self.asks = {float(p): float(q) for p, q in snapshot["asks"] if float(q) > 0}
+        self.initialized = True
+        for msg in self._buffer:
+            self._apply(msg)
+        self._buffer.clear()
+
+    def apply_diff(self, msg: dict[str, Any]) -> bool:
+        """Apply a diff event. Returns False if a re-sync (new snapshot) is needed."""
+        if not self.initialized:
+            if len(self._buffer) < self.MAX_BUFFER:
+                self._buffer.append(msg)
+            return True
+        return self._apply(msg)
+
+    def _apply(self, msg: dict[str, Any]) -> bool:
+        U: int = msg["U"]
+        u: int = msg["u"]
+        if u < self.last_update_id + 1:
+            return True  # stale event, skip silently
+        if U > self.last_update_id + 1:
+            # Gap in sequence — need fresh snapshot
+            self.initialized = False
+            self._buffer = [msg]
+            return False
+        for p, q in msg.get("b", []):
+            price, qty = float(p), float(q)
+            if qty == 0.0:
+                self.bids.pop(price, None)
+            else:
+                self.bids[price] = qty
+        for p, q in msg.get("a", []):
+            price, qty = float(p), float(q)
+            if qty == 0.0:
+                self.asks.pop(price, None)
+            else:
+                self.asks[price] = qty
+        self.last_update_id = u
+        return True
+
+    def sorted_bids(self, limit: int = 500) -> list[tuple[float, float]]:
+        return sorted(self.bids.items(), key=lambda x: x[0], reverse=True)[:limit]
+
+    def sorted_asks(self, limit: int = 500) -> list[tuple[float, float]]:
+        return sorted(self.asks.items(), key=lambda x: x[0])[:limit]
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +314,7 @@ class MarketCache:
         bids: list[tuple[float, float]],
         asks: list[tuple[float, float]],
     ) -> None:
-        """Store depth snapshot and build wall history (from @depth20@100ms stream)."""
+        """Store full order book snapshot and build wall history (from @depth@100ms diff stream)."""
         async with self._lock(symbol):
             self.depth_bids[symbol] = bids
             self.depth_asks[symbol] = asks
