@@ -1,5 +1,12 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-06 14:51 UTC]
+WB: fix absorption SL (ATR-based, min 0.3%), WALL_MISS_GRACE 3->10 (1s at 100ms loop)
+Bug 1: absorption market entries had SL = wp*(1-0.002) but entry < wp for LONG,
+so SL was ~0 distance. Fix: sl = entry - max(atr*0.75, entry*0.003).
+Bug 2: WALL_MISS_GRACE=3 at new 100ms loop = only 300ms before cancelling bounce limit.
+Fix: WALL_MISS_GRACE=10 = 1 second window.
+
 ## [2026-04-06 02:30 UTC]
 CB: BREAK_CLEARANCE_PCT 0.15%→0.05% — fix over-filtering of legitimate breaks
 Root cause of missed BCH trade: DIAG showed "RETEST ob=0.88-0.95" for 7+ minutes

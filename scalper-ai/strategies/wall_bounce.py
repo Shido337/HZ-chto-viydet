@@ -94,10 +94,11 @@ class WallBounce(BaseStrategy):
             ):
                 entry = snap.ask  # market entry — breakout is imminent
                 atr = ap.atr_value
-                # SL just below the wall (if eaten wall holds as support after break, it's fine;
-                # if it doesn't — we exit quickly)
-                raw_sl = wp * (1 - SL_BUFFER_PCT)
-                sl = max(raw_sl, entry * (1 - MAX_SL_PCT))
+                # SL: ATR-based with minimum 0.3% from entry.
+                # Wall-level SL (wp*0.998) is too tight when entry < wall.
+                min_sl_dist = max(atr * 0.75, entry * 0.003) if atr > 0 else entry * 0.003
+                sl = entry - min_sl_dist
+                sl = max(sl, entry * (1 - MAX_SL_PCT))
                 sl_dist = (entry - sl) / entry
                 if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                     return None
@@ -123,8 +124,10 @@ class WallBounce(BaseStrategy):
             ):
                 entry = snap.bid
                 atr = ap.atr_value
-                raw_sl = wp * (1 + SL_BUFFER_PCT)
-                sl = min(raw_sl, entry * (1 + MAX_SL_PCT))
+                # SL: ATR-based with minimum 0.3% from entry.
+                min_sl_dist = max(atr * 0.75, entry * 0.003) if atr > 0 else entry * 0.003
+                sl = entry + min_sl_dist
+                sl = min(sl, entry * (1 + MAX_SL_PCT))
                 sl_dist = (sl - entry) / entry
                 if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                     return None

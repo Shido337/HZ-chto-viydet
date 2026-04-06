@@ -35,7 +35,7 @@ MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
 PENDING_TIMEOUT = 60  # seconds — give pullback entries more time to fill
 PENDING_WB_TIMEOUT = 30  # WB bounce limit: wall edge is short-lived, cancel sooner
-WALL_MISS_GRACE = 3  # cancel pending after N consecutive wall-miss checks
+WALL_MISS_GRACE = 10  # cancel pending after N consecutive wall-miss checks (10 x 100ms = 1s)
 
 
 class PaperTrader:
