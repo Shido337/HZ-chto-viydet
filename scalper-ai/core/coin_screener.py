@@ -11,18 +11,19 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 MIN_QUOTE_VOLUME_24H = 50_000_000.0    # $50M min 24h USDT volume (lowered for mid-caps with walls)
 MAX_SPREAD_PCT = 0.0005                  # 0.05% max bid-ask spread
-MIN_PRICE_CHANGE_PCT = 1.5              # min 1.5% daily move (abs) — filters dead coins
+MIN_PRICE_CHANGE_PCT = 1.0              # min 1.0% daily move (abs) — 1.5% cut BTC/ETH on flat days
 MAX_PRICE_CHANGE_PCT = 12.0             # max 12% daily move (was 30% — kills pump-and-dump coins)
 MIN_TRADE_COUNT_24H = 100_000           # min 100k trades (lowered for mid-caps)
-MAX_SYMBOLS = 15                        # top 15 — more mid-caps with depth walls
+MAX_SYMBOLS = 20                        # top 20 — BTC/ETH added back, wider coverage
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
 DEPTH_WALL_MULT = 5.0                   # level ≥5× avg = wall (for screening, relaxed vs live 8×)
 
-# Coins to always exclude (stablecoins, true mega-caps that barely move at 25x)
-# SOL, DOGE, XRP, LINK are INCLUDED — they have $500M-$5B volume, tight spreads,
-# and real swing structure. At 25x leverage, SOL's 0.5% move = 12.5% return.
+# Coins to always exclude (stablecoins, truly illiquid stuff)
+# BTC and ETH are NOW INCLUDED — they have the thickest institutional walls
+# (not spoofed), tightest spreads, and are ideal for WB strategy.
+# BNB excluded — Binance-native, unusual book dynamics.
 EXCLUDED_SYMBOLS: set[str] = {
-    "BTCUSDT", "ETHUSDT", "BNBUSDT",
+    "BNBUSDT",
     "ADAUSDT", "AVAXUSDT", "DOTUSDT",
 }
 

@@ -297,3 +297,7 @@ Files: core/paper_trader.py
 ## [2026-04-06 13:18 UTC]
 bot_engine: LOOP_INTERVAL 1s->0.1s for positions+pending, SIGNAL_INTERVAL=1s for signal search -- matches depth WS 100ms
 Files: core/bot_engine.py
+
+## [2026-04-06 18:49 UTC]
+screener: include BTC/ETH, MIN_PRICE_CHANGE 1.5->1.0, MAX_SYMBOLS 15->20
+Files: core/coin_screener.py
