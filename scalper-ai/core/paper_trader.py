@@ -35,9 +35,7 @@ MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
 PENDING_TIMEOUT = 60  # seconds — give pullback entries more time to fill
 PENDING_WB_TIMEOUT = 30  # WB bounce limit: wall edge is short-lived, cancel sooner
-WALL_EATEN_EXIT_PCT = 0.50  # exit bounce if ≥50% of wall qty absorbed (was 25% — too aggressive)
 WALL_MISS_GRACE = 3  # cancel pending after N consecutive wall-miss checks
-WALL_MISS_GRACE_POS = 5  # close position after N consecutive (more forgiving for filled trades)
 
 
 class PaperTrader:
@@ -47,8 +45,7 @@ class PaperTrader:
         self.cache = cache
         self.positions: dict[str, Position] = {}
         self.pending: dict[str, PendingOrder] = {}
-        self._wall_miss: dict[str, int] = {}  # symbol → consecutive wall-miss count
-        self._pos_wall_miss: dict[str, int] = {}  # same for open positions
+        self._wall_miss: dict[str, int] = {}  # symbol → consecutive wall-miss count for pending
 
     @property
     def open_count(self) -> int:
@@ -248,7 +245,6 @@ class PaperTrader:
         pos = self.positions.pop(symbol, None)
         if pos is None:
             return None
-        self._pos_wall_miss.pop(symbol, None)
         pos.exit_price = price
         pos.current_pnl = self._calc_pnl(pos, price, reason)
         logger.info(
@@ -272,32 +268,11 @@ class PaperTrader:
             self._check_breakeven(pos, snap.price, ap)
             self._check_trailing(pos, snap.price, ap)
             exit_result = self._check_exits(pos, snap)
-            # Wall-disappearance check for WB bounce — only exit when LOSING
-            # If in profit → bounce thesis worked, trailing/TP handle exit.
-            if (
-                exit_result is None
-                and pos.setup_type == SetupType.WALL_BOUNCE
-                and pos.signal.wall_ref_price > 0
-                and (time.time() - pos.opened_at) >= 5
-            ):
-                is_long = pos.direction == Direction.LONG
-                in_profit = (snap.price > pos.entry_price) if is_long else (snap.price < pos.entry_price)
-                if not in_profit:
-                    from data.indicators import wall_qty_at_price
-                    depth_levels = snap.depth_bids if is_long else snap.depth_asks
-                    wall_ref = pos.signal.wall_ref_price
-                    ref_qty = pos.signal.wall_ref_qty or 1.0
-                    current_qty = wall_qty_at_price(depth_levels, wall_ref)
-                    wall_ok = current_qty >= ref_qty * 0.05
-                    if wall_ok:
-                        self._pos_wall_miss.pop(symbol, None)
-                    else:
-                        miss = self._pos_wall_miss.get(symbol, 0) + 1
-                        self._pos_wall_miss[symbol] = miss
-                        if miss >= WALL_MISS_GRACE_POS:
-                            exit_result = ("wall_absorbed", snap.price)
-                else:
-                    self._pos_wall_miss.pop(symbol, None)
+            # Wall-disappearance check removed for positions.
+            # Rationale: SL is placed just beyond the wall — if price breaks the
+            # wall the SL fires. If MM simply pulls the wall after our fill
+            # (spoofing), exiting immediately locks in a loss before price had a
+            # chance to move. SL/TP/CVD/time_stop cover all real exit scenarios.
             if exit_result:
                 reason, exit_price = exit_result
                 p = self.close_position(symbol, exit_price, reason)
