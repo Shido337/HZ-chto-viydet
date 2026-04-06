@@ -93,8 +93,8 @@ class WallBounce(BaseStrategy):
         if ask_wall:
             wp, wq = ask_wall
             if (snap.price < wp
-                    and wall_on_round_number(wp)
                     and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)):
+                # round_number NOT required — a 40%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m >= MIN_CVD_BUILD:
                     entry = snap.ask
@@ -116,8 +116,8 @@ class WallBounce(BaseStrategy):
         if bid_wall:
             wp, wq = bid_wall
             if (snap.price > wp
-                    and wall_on_round_number(wp)
                     and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)):
+                # round_number NOT required — a 40%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m <= -MIN_CVD_BUILD:
                     entry = snap.bid

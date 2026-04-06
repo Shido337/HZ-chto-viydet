@@ -349,3 +349,7 @@ Files: core/coin_screener.py, tests/test_coin_screener.py
 ## [2026-04-06 20:33 UTC]
 screener: min volume $100M, trade count filter removed
 Files: core/coin_screener.py, tests/test_coin_screener.py
+
+## [2026-04-06 20:39 UTC]
+screener: min vol $70M, max move 50%; absorption: remove round_number filter
+Files: core/coin_screener.py, strategies/wall_bounce.py
