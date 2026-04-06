@@ -105,6 +105,7 @@ class MarketSnapshot:
     ask_qty: float = 0.0
     cvd: float = 0.0
     cvd_delta_1m: float = 0.0
+    cvd_delta_20s: float = 0.0   # rolling delta over last 20 seconds (fast momentum)
     volume_1m: float = 0.0
     regime: MarketRegime = MarketRegime.RANGING
     indicators: IndicatorSet = field(default_factory=IndicatorSet)
@@ -228,6 +229,10 @@ class MarketCache:
         self._cvd_at_1m_start: dict[str, float] = {}
         self._vol_at_1m_start: dict[str, float] = {}
         self._volume_accum: dict[str, float] = {}
+        # CVD rolling samples for short-term delta (20s window)
+        # Each entry: (timestamp, cvd_value); throttled to 1 push per 0.5s
+        self._cvd_samples: dict[str, deque[tuple[float, float]]] = {}
+        self._cvd_last_sample_ts: dict[str, float] = {}
         # Depth (Level-2) data from @depth20 stream
         self.depth_bids: dict[str, list[tuple[float, float]]] = {}
         self.depth_asks: dict[str, list[tuple[float, float]]] = {}
@@ -257,6 +262,8 @@ class MarketCache:
         self._cvd_at_1m_start[symbol] = 0.0
         self._vol_at_1m_start[symbol] = 0.0
         self._volume_accum[symbol] = 0.0
+        self._cvd_samples[symbol] = deque(maxlen=120)  # 120 × 0.5s = 60s history
+        self._cvd_last_sample_ts[symbol] = 0.0
         self.depth_bids[symbol] = []
         self.depth_asks[symbol] = []
         self.wall_history[symbol] = deque(maxlen=300)  # 300 × 100ms = 30s of wall history
@@ -362,6 +369,11 @@ class MarketCache:
             delta = -qty if is_sell else qty
             self.cvd[symbol] += delta
             self._volume_accum[symbol] += qty
+            # Throttled CVD sample for 20s rolling delta (max 1 push per 0.5s)
+            _now = time.time()
+            if _now - self._cvd_last_sample_ts.get(symbol, 0.0) >= 0.5:
+                self._cvd_samples[symbol].append((_now, self.cvd[symbol]))
+                self._cvd_last_sample_ts[symbol] = _now
 
     async def update_regime(
         self, symbol: str, regime: MarketRegime,
@@ -383,6 +395,27 @@ class MarketCache:
 
     def mark_stale(self, symbol: str) -> None:
         self._stale[symbol] = True
+
+    # -- short-term CVD delta -----------------------------------------------
+
+    def _compute_cvd_delta_20s(self, symbol: str) -> float:
+        """Return CVD delta over the last 20 seconds from throttled samples."""
+        samples = self._cvd_samples.get(symbol)
+        if not samples:
+            return 0.0
+        now = time.time()
+        cutoff = now - 20.0
+        current_cvd = self.cvd.get(symbol, 0.0)
+        # Find the oldest sample still within the 20s window
+        baseline: float | None = None
+        for ts, val in samples:
+            if ts >= cutoff:
+                baseline = val
+                break  # deque is in append order (oldest first within window)
+        if baseline is None:
+            # All samples older than 20s — use the most recent one as baseline
+            baseline = samples[-1][1] if samples else current_cvd
+        return current_cvd - baseline
 
     # -- 1-minute CVD / volume rotation -------------------------------------
 
@@ -410,6 +443,7 @@ class MarketCache:
             ask_qty=book.ask_qty,
             cvd=self.cvd.get(symbol, 0.0),
             cvd_delta_1m=self.cvd_delta_1m.get(symbol, 0.0),
+            cvd_delta_20s=self._compute_cvd_delta_20s(symbol),
             volume_1m=self.volume_1m.get(symbol, 0.0),
             regime=self.regime.get(symbol, MarketRegime.RANGING),
             indicators=self.indicators.get(symbol, IndicatorSet()),

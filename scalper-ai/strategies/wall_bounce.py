@@ -100,7 +100,7 @@ class WallBounce(BaseStrategy):
                     and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)):
                 # round_number NOT required — a 40%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
-                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m >= MIN_CVD_BUILD:
+                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s >= MIN_CVD_BUILD:
                     entry = snap.ask
                     atr = ap.atr_value
                     raw_sl = entry - max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 - 0.003)
@@ -125,7 +125,7 @@ class WallBounce(BaseStrategy):
                     and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)):
                 # round_number NOT required — a 55%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
-                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m <= -MIN_CVD_BUILD:
+                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s <= -MIN_CVD_BUILD:
                     entry = snap.bid
                     atr = ap.atr_value
                     raw_sl = entry + max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 + 0.003)
@@ -166,7 +166,7 @@ class WallBounce(BaseStrategy):
                 if (wall_on_round_number(wp)
                         and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
                         and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
-                        and snap.cvd_delta_1m >= 0
+                        and snap.cvd_delta_20s >= 0
                         and ob >= 0.48):
                     entry = wp * (1 + BOUNCE_ENTRY_GAP)  # limit just above wall (maker)
                     sl = wp * (1 - SL_BUFFER_PCT)
@@ -187,7 +187,7 @@ class WallBounce(BaseStrategy):
                 if (wall_on_round_number(wp)
                         and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
                         and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
-                        and snap.cvd_delta_1m <= 0
+                        and snap.cvd_delta_20s <= 0
                         and ob <= 0.52):
                     entry = wp * (1 - BOUNCE_ENTRY_GAP)  # limit just below wall (maker)
                     sl = wp * (1 + SL_BUFFER_PCT)
@@ -236,11 +236,11 @@ class WallBounce(BaseStrategy):
             return None
 
         # -- Score breakdown -------------------------------------------------
-        # Absorption: CVD alignment is primary evidence
+        # Use 20s CVD for scoring — reflects current momentum, not stale 1m data
         if mode == "absorption":
-            cvd_raw = min(abs(snap.cvd_delta_1m) / 1000, 1.0)
+            cvd_raw = min(abs(snap.cvd_delta_20s) / 1000, 1.0)
         else:
-            cvd_raw = min(abs(snap.cvd_delta_1m) / 500, 0.5)
+            cvd_raw = min(abs(snap.cvd_delta_20s) / 500, 0.5)
         cvd_score = cvd_raw * 0.25
 
         ob_directional = ob if d == Direction.LONG else (1.0 - ob)

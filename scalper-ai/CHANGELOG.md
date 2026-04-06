@@ -33,3 +33,7 @@ Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py
 ## [2026-04-06 23:20 UTC]
 fix: floor() in bucket_levels, BUCKET_PCT 0.001->0.003, dist 5%->3%, absorption dist cap 1.5%
 Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py
+
+## [2026-04-06 23:31 UTC]
+feat: cvd_delta_20s rolling 20s CVD; WallBounce uses 20s CVD instead of stale 1m
+Files: data/cache.py, strategies/wall_bounce.py
