@@ -19,7 +19,7 @@ ranging/low-vol but is allowed everywhere.
 from __future__ import annotations
 
 from data.cache import MarketRegime, MarketSnapshot
-from data.indicators import find_wall, order_book_imbalance, wall_absorption_pct, wall_is_eaten
+from data.indicators import find_wall, order_book_imbalance, wall_absorption_pct, wall_is_eaten, wall_stable
 from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy
 
@@ -149,7 +149,11 @@ class WallBounce(BaseStrategy):
         if bid_wall:
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
-            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT and ob >= 0.45:
+            if (
+                MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT
+                and ob >= 0.45
+                and wall_stable(snap.wall_history, wp, "bid")
+            ):
                 # Wall is the thesis — CVD direction handled by scoring, not hard gate.
                 # Limit entry slightly ABOVE the wall — fills as price approaches.
                 # If wall gets eaten → paper_trader closes and absorption re-enters.
@@ -169,7 +173,11 @@ class WallBounce(BaseStrategy):
         if ask_wall:
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
-            if MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT and ob <= 0.55:
+            if (
+                MIN_BOUNCE_DIST_PCT <= dist <= BOUNCE_DIST_PCT
+                and ob <= 0.55
+                and wall_stable(snap.wall_history, wp, "ask")
+            ):
                 entry = wp * (1 - ENTRY_BEFORE_WALL_PCT)
                 sl = wp * (1 + SL_BUFFER_PCT)
                 sl_dist = (sl - entry) / entry
@@ -270,4 +278,5 @@ class WallBounce(BaseStrategy):
             sl_price=sl,
             tp_price=tp,
             wall_ref_price=wall_ref_price,
+            wall_ref_qty=wall_qty,
         )

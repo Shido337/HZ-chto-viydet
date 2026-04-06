@@ -35,8 +35,9 @@ MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
 PENDING_TIMEOUT = 60  # seconds — give pullback entries more time to fill
 PENDING_WB_TIMEOUT = 30  # WB bounce limit: wall edge is short-lived, cancel sooner
-WALL_EATEN_EXIT_PCT = 0.25  # exit bounce if ≥25% of wall qty absorbed
-WALL_MISS_GRACE = 3  # cancel WB only after N consecutive wall-miss checks
+WALL_EATEN_EXIT_PCT = 0.50  # exit bounce if ≥50% of wall qty absorbed (was 25% — too aggressive)
+WALL_MISS_GRACE = 3  # cancel pending after N consecutive wall-miss checks
+WALL_MISS_GRACE_POS = 5  # close position after N consecutive (more forgiving for filled trades)
 
 
 class PaperTrader:
@@ -210,22 +211,17 @@ class PaperTrader:
                     f"@ {order.entry_price:.6f} (not filled in {timeout}s)",
                 )
 
-            # WB bounce: cancel if wall level absent for N consecutive checks
+            # WB bounce: cancel if wall qty dropped below 30% of original
             elif (
                 order.setup_type == SetupType.WALL_BOUNCE
                 and order.signal.wall_ref_price > 0
             ):
-                from data.indicators import find_wall as _find_wall
+                from data.indicators import wall_qty_at_price
                 snap2 = self.cache.get_snapshot(symbol)
-                if order.direction == Direction.LONG:
-                    wall = _find_wall(snap2.depth_bids)
-                else:
-                    wall = _find_wall(snap2.depth_asks)
-                wall_ok = (
-                    wall is not None
-                    and abs(wall[0] - order.signal.wall_ref_price)
-                    / order.signal.wall_ref_price < 0.003
-                )
+                depth = snap2.depth_bids if order.direction == Direction.LONG else snap2.depth_asks
+                current_qty = wall_qty_at_price(depth, order.signal.wall_ref_price)
+                ref_qty = order.signal.wall_ref_qty or 1.0
+                wall_ok = current_qty >= ref_qty * 0.05  # wall still has ≥5% — not fully pulled
                 if wall_ok:
                     self._wall_miss.pop(symbol, None)
                 else:
@@ -237,7 +233,8 @@ class PaperTrader:
                         expired.append(order)
                         logger.info(
                             f"[PAPER] WB CANCELLED {symbol} "
-                            f"wall {order.signal.wall_ref_price:.6f} disappeared "
+                            f"wall {order.signal.wall_ref_price:.6f} "
+                            f"qty {current_qty:.0f}/{ref_qty:.0f} "
                             f"({miss} consecutive misses)",
                         )
 
@@ -275,29 +272,32 @@ class PaperTrader:
             self._check_breakeven(pos, snap.price, ap)
             self._check_trailing(pos, snap.price, ap)
             exit_result = self._check_exits(pos, snap)
-            # Wall-disappearance check for WB bounce (needs self for miss counter)
+            # Wall-disappearance check for WB bounce — only exit when LOSING
+            # If in profit → bounce thesis worked, trailing/TP handle exit.
             if (
                 exit_result is None
                 and pos.setup_type == SetupType.WALL_BOUNCE
                 and pos.signal.wall_ref_price > 0
                 and (time.time() - pos.opened_at) >= 5
             ):
-                from data.indicators import find_wall
                 is_long = pos.direction == Direction.LONG
-                depth_levels = snap.depth_bids if is_long else snap.depth_asks
-                wall = find_wall(depth_levels)
-                wall_ref = pos.signal.wall_ref_price
-                wall_ok = (
-                    wall is not None
-                    and abs(wall[0] - wall_ref) / wall_ref < 0.003
-                )
-                if wall_ok:
-                    self._pos_wall_miss.pop(symbol, None)
+                in_profit = (snap.price > pos.entry_price) if is_long else (snap.price < pos.entry_price)
+                if not in_profit:
+                    from data.indicators import wall_qty_at_price
+                    depth_levels = snap.depth_bids if is_long else snap.depth_asks
+                    wall_ref = pos.signal.wall_ref_price
+                    ref_qty = pos.signal.wall_ref_qty or 1.0
+                    current_qty = wall_qty_at_price(depth_levels, wall_ref)
+                    wall_ok = current_qty >= ref_qty * 0.05
+                    if wall_ok:
+                        self._pos_wall_miss.pop(symbol, None)
+                    else:
+                        miss = self._pos_wall_miss.get(symbol, 0) + 1
+                        self._pos_wall_miss[symbol] = miss
+                        if miss >= WALL_MISS_GRACE_POS:
+                            exit_result = ("wall_absorbed", snap.price)
                 else:
-                    miss = self._pos_wall_miss.get(symbol, 0) + 1
-                    self._pos_wall_miss[symbol] = miss
-                    if miss >= WALL_MISS_GRACE:
-                        exit_result = ("wall_absorbed", snap.price)
+                    self._pos_wall_miss.pop(symbol, None)
             if exit_result:
                 reason, exit_price = exit_result
                 p = self.close_position(symbol, exit_price, reason)
@@ -381,19 +381,7 @@ class PaperTrader:
             return ("tp_hit", pos.tp_price)
         if not is_long and price <= pos.tp_price:
             return ("tp_hit", pos.tp_price)
-        # Wall absorbed — close WB bounce if wall qty eaten significantly
-        # Grace: wait ≥5s after entry so pre-existing absorption doesn't insta-close
-        if (
-            pos.setup_type == SetupType.WALL_BOUNCE
-            and pos.signal.wall_ref_price > 0
-            and elapsed_sec >= 5
-        ):
-            from data.indicators import wall_absorption_pct
-            wall_ref = pos.signal.wall_ref_price
-            side = "bid" if is_long else "ask"
-            abs_pct = wall_absorption_pct(snap.wall_history, wall_ref, side)
-            if abs_pct >= WALL_EATEN_EXIT_PCT:
-                return ("wall_absorbed", price)
+        # WB bounce: wall_absorbed exit handled in update_positions (checks live qty via wall_qty_at_price)
         # Stale exit: losing >0.5% after 4 min — cut deep losers early
         if not in_profit and elapsed_min >= STALE_EXIT_MINUTES:
             loss_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0

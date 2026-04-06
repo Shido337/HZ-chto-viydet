@@ -247,3 +247,7 @@ Files: scalper-ai/strategies/continuation_break.py
 ## [2026-04-06 10:42 UTC]
 WB bounce: remove CVD hard gate, fix scoring (wall-based thesis), add wall-miss grace period (3 checks), 5s min hold before wall_absorbed exit, separate BOUNCE_MIN_SCORE=0.55
 Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py, core/coin_screener.py, core/bot_engine.py, data/indicators.py, exchange/binance_client.py
+
+## [2026-04-06 11:25 UTC]
+WB: fix wall validity — direct qty check (wall_qty_at_price), wall_stable 10s filter, remove wall_absorption_pct from exits, fix wall_absorption_pct latest-by-ts bug, WALL_MULTIPLIER=5.0, wall_absorbed only when losing
+Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py, data/indicators.py, data/cache.py

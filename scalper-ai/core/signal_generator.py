@@ -50,6 +50,7 @@ class Signal:
     sl_price: float = 0.0
     tp_price: float = 0.0
     wall_ref_price: float = 0.0   # WB bounce only: detected wall price (limit entry + validity check)
+    wall_ref_qty: float = 0.0     # WB bounce only: wall qty at signal time (for validity decay check)
     created_at: float = field(default_factory=time.time)
 
 
