@@ -30,7 +30,7 @@ BOUNCE_DIST_PCT: float = 0.008    # price within 0.8 % of wall (max proximity)
 MIN_BOUNCE_DIST_PCT: float = 0.003  # wall must be ≥0.3 % from price (no spread noise)
 ABSORPTION_PCT: float = 0.40      # ≥40 % wall qty absorbed = active absorption
 MIN_CVD_BUILD: float = 500.0      # minimum |CVD delta 1m| for absorption (prev 150)
-SL_BUFFER_PCT: float = 0.0008     # 0.08 % buffer beyond wall for bounce SL
+SL_BUFFER_PCT: float = 0.002      # 0.2 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float = 0.008         # hard cap: never risk more than 0.8 %
 MIN_RR: float = 1.5               # minimum reward-to-risk ratio
 WB_MIN_SCORE: float = 0.70        # WB-specific threshold (higher than global 0.65)
