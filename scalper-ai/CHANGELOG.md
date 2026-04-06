@@ -301,3 +301,7 @@ Files: core/bot_engine.py
 ## [2026-04-06 18:49 UTC]
 screener: include BTC/ETH, MIN_PRICE_CHANGE 1.5->1.0, MAX_SYMBOLS 15->20
 Files: core/coin_screener.py
+
+## [2026-04-06 18:50 UTC]
+screener: revert BTC/ETH inclusion — walls too thick for WB at our scale
+Files: core/coin_screener.py

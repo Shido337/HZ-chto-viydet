@@ -18,12 +18,12 @@ MAX_SYMBOLS = 20                        # top 20 — BTC/ETH added back, wider c
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
 DEPTH_WALL_MULT = 5.0                   # level ≥5× avg = wall (for screening, relaxed vs live 8×)
 
-# Coins to always exclude (stablecoins, truly illiquid stuff)
-# BTC and ETH are NOW INCLUDED — they have the thickest institutional walls
-# (not spoofed), tightest spreads, and are ideal for WB strategy.
-# BNB excluded — Binance-native, unusual book dynamics.
+# Coins to always exclude:
+# BTC/ETH — $30-50B daily volume, walls are institutional and get absorbed silently.
+# No clean WB bounce at our scale. Too liquid for proportional wall detection.
+# BNB — Binance-native, unusual book dynamics.
 EXCLUDED_SYMBOLS: set[str] = {
-    "BNBUSDT",
+    "BTCUSDT", "ETHUSDT", "BNBUSDT",
     "ADAUSDT", "AVAXUSDT", "DOTUSDT",
 }
 
