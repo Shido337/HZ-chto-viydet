@@ -220,23 +220,58 @@ def volume_spike_ratio(candles: list[dict[str, Any]], period: int = 20) -> float
 # Order-book wall helpers (for WallBounce strategy)
 # ---------------------------------------------------------------------------
 
+# Adaptive bucketing: merge price levels within this fraction of mid_price.
+# 0.001 = 0.1% → for SIREN @0.60 that is ~0.0006 per bucket (≈3 ticks).
+BUCKET_PCT = 0.001
+
+
+def bucket_levels(
+    levels: list[tuple[float, float]],
+    mid_price: float,
+    bucket_pct: float = BUCKET_PCT,
+) -> list[tuple[float, float]]:
+    """Aggregate nearby price levels into percentage-based buckets.
+
+    All levels within the same *bucket_pct*-wide bin are merged: quantities are
+    summed and the representative price is taken from the highest-qty level in
+    the bucket.  This prevents individual tiny ticks from masking real clusters.
+    """
+    if bucket_pct <= 0 or mid_price <= 0 or not levels:
+        return list(levels)
+    bucket_width = mid_price * bucket_pct
+    totals: dict[int, float] = {}
+    best: dict[int, tuple[float, float]] = {}  # idx → (best_qty, best_price)
+    for price, qty in levels:
+        idx = int(price / bucket_width)
+        totals[idx] = totals.get(idx, 0.0) + qty
+        prev_best = best.get(idx, (0.0, price))
+        if qty > prev_best[0]:
+            best[idx] = (qty, price)
+    return [(best[i][1], totals[i]) for i in sorted(totals)]
+
+
 def find_wall(
     levels: tuple | list,
     multiplier: float = 5.0,
     mid_price: float = 0.0,
     max_dist_pct: float = 0.05,
+    bucket_pct: float = BUCKET_PCT,
 ) -> tuple[float, float] | None:
     """Detect dominant order wall in a sequence of (price, qty) depth levels.
 
     Only considers levels within *max_dist_pct* of *mid_price* (default 5%).
-    Returns (wall_price, wall_qty) for the largest level that is ≥multiplier×avg,
+    Levels are first aggregated into *bucket_pct*-wide price bins so that
+    clusters spread across adjacent ticks are visible as a single wall.
+    Returns (wall_price, wall_qty) for the largest bucket that is ≥multiplier×avg,
     or None if no such level exists.
     """
     if mid_price > 0:
         lo = mid_price * (1.0 - max_dist_pct)
         hi = mid_price * (1.0 + max_dist_pct)
         levels = [(p, q) for p, q in levels if lo <= p <= hi]
-    if len(levels) < 5:
+    # Aggregate nearby ticks into buckets before computing avg
+    levels = bucket_levels(list(levels), mid_price, bucket_pct)
+    if len(levels) < 3:
         return None
     qtys = [q for _, q in levels if q > 0]
     if not qtys:

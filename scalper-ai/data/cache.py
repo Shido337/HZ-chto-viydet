@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from data.indicators import bucket_levels, BUCKET_PCT
+
 
 # ---------------------------------------------------------------------------
 # Enums & lightweight data holders
@@ -280,7 +282,9 @@ class MarketCache:
             lo = mid_price * (1.0 - max_dist_pct)
             hi = mid_price * (1.0 + max_dist_pct)
             levels = [(p, q) for p, q in levels if lo <= p <= hi]
-        if len(levels) < 5:
+        # Aggregate adjacent ticks into percentage-based buckets before scoring
+        levels = bucket_levels(levels, mid_price, BUCKET_PCT)
+        if len(levels) < 3:
             return 0.0, 0.0
         qtys = [q for _, q in levels if q > 0]
         if not qtys:

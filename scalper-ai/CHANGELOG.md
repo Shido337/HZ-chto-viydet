@@ -17,3 +17,7 @@ feat: replace depth20@100ms with full incremental order book (@depth@100ms)
 - wall_history now built from 500+ levels instead of 20 (genuine wall detection)
 - Fix stale test: test_filters_extreme_volatility threshold 40->51%
 
+
+## [2026-04-06 23:04 UTC]
+feat: adaptive price bucketing in find_wall and _detect_wall (BUCKET_PCT=0.1%)
+Files: data/indicators.py, data/cache.py
