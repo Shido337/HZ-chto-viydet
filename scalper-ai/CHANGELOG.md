@@ -45,3 +45,7 @@ Files: strategies/continuation_break.py
 ## [2026-04-06 23:40 UTC]
 screener: MAX_SYMBOLS 10->12
 Files: core/coin_screener.py
+
+## [2026-04-06 23:41 UTC]
+screener: MAX_SYMBOLS 12->20
+Files: core/coin_screener.py
