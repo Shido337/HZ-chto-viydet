@@ -55,11 +55,6 @@ class ContinuationBreak(BaseStrategy):
         if result is None:
             return None
         direction, broken_level, break_idx = result
-        # Continuation = WITH the trend, never against
-        if snap.regime == MarketRegime.TRENDING_BULL and direction != Direction.LONG:
-            return None
-        if snap.regime == MarketRegime.TRENDING_BEAR and direction != Direction.SHORT:
-            return None
         if not self._check_flow(snap, direction):
             return None
         if not self._check_rejection_candle(snap, direction):

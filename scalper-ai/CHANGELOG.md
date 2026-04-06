@@ -37,3 +37,7 @@ Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py
 ## [2026-04-06 23:31 UTC]
 feat: cvd_delta_20s rolling 20s CVD; WallBounce uses 20s CVD instead of stale 1m
 Files: data/cache.py, strategies/wall_bounce.py
+
+## [2026-04-06 23:37 UTC]
+fix: remove regime direction block in CB — allows SHORT in BULL and LONG in BEAR
+Files: strategies/continuation_break.py
