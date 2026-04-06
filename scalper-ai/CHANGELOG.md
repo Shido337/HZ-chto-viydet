@@ -305,3 +305,7 @@ Files: core/coin_screener.py
 ## [2026-04-06 18:50 UTC]
 screener: revert BTC/ETH inclusion — walls too thick for WB at our scale
 Files: core/coin_screener.py
+
+## [2026-04-06 19:08 UTC]
+screener: remove ADAUSDT from excluded — $205M vol, 512k trades, passes all thresholds (data-verified)
+Files: core/coin_screener.py

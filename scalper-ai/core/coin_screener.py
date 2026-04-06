@@ -22,9 +22,10 @@ DEPTH_WALL_MULT = 5.0                   # level ≥5× avg = wall (for screening
 # BTC/ETH — $30-50B daily volume, walls are institutional and get absorbed silently.
 # No clean WB bounce at our scale. Too liquid for proportional wall detection.
 # BNB — Binance-native, unusual book dynamics.
+# DOTUSDT — sub-$50M volume, naturally below MIN_QUOTE_VOLUME_24H threshold anyway.
 EXCLUDED_SYMBOLS: set[str] = {
     "BTCUSDT", "ETHUSDT", "BNBUSDT",
-    "ADAUSDT", "DOTUSDT",
+    "DOTUSDT",
 }
 
 
