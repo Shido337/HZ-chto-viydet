@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import numpy as np
@@ -279,3 +280,129 @@ def wall_absorption_pct(
     if max_qty <= 0:
         return 0.0
     return max(0.0, (max_qty - qtys[-1]) / max_qty)
+
+
+def wall_stable(
+    history: tuple,
+    wall_price: float,
+    side: str,
+    min_seconds: float = 5.0,
+    match_pct: float = 0.001,
+) -> bool:
+    """True if the wall at *wall_price* has been continuously present for at
+    least *min_seconds*.
+
+    Spoof walls appear and disappear in <1 second.  Real walls sit for many
+    seconds or minutes.  We require the wall to appear in consecutive snapshots
+    covering ≥ min_seconds of history (snapshots are 100 ms apart).
+
+    Args:
+        history:      tuple of WallSnapshot from MarketSnapshot.wall_history.
+        wall_price:   price level of the wall to check.
+        side:         "bid" or "ask".
+        min_seconds:  minimum wall age in seconds (default 5 s = 50 snapshots).
+        match_pct:    price tolerance for matching snapshots to wall_price.
+    """
+    if not history:
+        return False
+    min_snaps = int(min_seconds / 0.1)   # 100 ms per snapshot
+    thresh = wall_price * match_pct
+    # Walk backwards through history; count unbroken streak at this level
+    streak = 0
+    for snap in reversed(history):
+        if side == "ask":
+            present = abs(snap.ask_wall_price - wall_price) <= thresh and snap.ask_wall_qty > 0
+        else:
+            present = abs(snap.bid_wall_price - wall_price) <= thresh and snap.bid_wall_qty > 0
+        if present:
+            streak += 1
+        else:
+            break   # first gap → streak is over
+    return streak >= min_snaps
+
+
+def wall_on_round_number(price: float, tolerance: float = 0.001) -> bool:
+    """True if *price* sits on a psychologically round level (real wall signal).
+
+    CScalp rule: real walls appear at round numbers (85000, 49000, 22500).
+    Spoofer walls appear at irregular prices (84783, 131.37).
+
+    Algorithm: only coarse sub-divisions of the order of magnitude are checked
+    (divisors 1, 2, 4, 5, 10, 20).  The finest unit for BTC ~85 000 is 500;
+    for SOL ~130 it is 5.  Finer grids produce false positives because nearly
+    any price falls within 0.1 % of some multiple.
+
+    Examples:
+        85000 → True  (85 × 1000)
+        84500 → True  (169 × 500)
+        84783 → False (nearest 500-multiple is 85000, 0.26 % away)
+        130.0 → True  (13 × 10)
+        131.37 → False
+    """
+    if price <= 0:
+        return False
+    magnitude = 10 ** math.floor(math.log10(price))
+    for divisor in (1, 2, 4, 5, 10, 20):
+        unit = magnitude / divisor
+        nearest = round(price / unit) * unit
+        if abs(price - nearest) / price <= tolerance:
+            return True
+    return False
+
+
+def count_level_touches(
+    klines: list[dict[str, Any]],
+    level: float,
+    touch_zone_pct: float = 0.002,
+    lookback: int = 200,
+) -> int:
+    """Count distinct candle touches of *level* in recent klines.
+
+    CScalp rule: ≥2 confirmed touches = strong level worth trading.
+    A single untested level is weak — it may not hold.
+
+    A touch is counted when a candle's high or low enters the zone
+    [level×(1−touch_zone_pct), level×(1+touch_zone_pct)].
+    Consecutive candles in the same zone count as ONE touch.
+
+    Args:
+        klines:         list of OHLCV dicts with keys 'h' and 'l'.
+        level:          price level to test.
+        touch_zone_pct: ±0.2 % tolerance (default).
+        lookback:       number of most-recent candles to inspect.
+    """
+    if not klines or level <= 0:
+        return 0
+    lo = level * (1.0 - touch_zone_pct)
+    hi = level * (1.0 + touch_zone_pct)
+    recent = klines[-lookback:]
+    touches = 0
+    in_zone = False
+    for c in recent:
+        hit = c["h"] >= lo and c["l"] <= hi
+        if hit and not in_zone:
+            touches += 1
+        in_zone = hit
+    return touches
+
+
+def vei(candles: list[dict[str, Any]], short: int = 10, long: int = 50) -> float:
+    """Volatility Expansion Index = ATR(short) / ATR(long).
+
+    From Reddit /r/algotrading — filters unstable market conditions.
+
+    VEI < 1.0  → stable / normal  → countertrend (bounce) setups work well
+    VEI > 1.2  → volatile / noisy → reduce size or skip bounce entries
+
+    Args:
+        candles: list of OHLCV dicts.
+        short:   fast ATR period (default 10).
+        long:    slow ATR period (default 50).
+    """
+    if len(candles) < long + 1:
+        return 1.0   # insufficient data → neutral
+    atr_short = atr(candles, short)
+    atr_long = atr(candles, long)
+    if atr_long <= 0:
+        return 1.0
+    return atr_short / atr_long

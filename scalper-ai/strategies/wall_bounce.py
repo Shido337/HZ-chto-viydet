@@ -1,37 +1,53 @@
 """WallBounce — Strategy 4.
 
-Detects dominant order-book walls (bid or ask levels ≥5× average depth)
-and fires signals for two sub-setups:
+Two sub-setups, mutually exclusive (absorption tried first):
 
-  BOUNCE    : Price approaching the wall → expects a reversal off the wall.
-              SL is placed just beyond the wall so a clean break invalidates
-              the thesis immediately.
+  BOUNCE     Price approaching wall from safe side.
+             Entry: limit order just in front of the wall (maker / GTX).
+             Thesis: wall holds → price reverses.
+             Filters: round number + wall stable ≥5 s + ≥2 level touches
+                      + VEI < 1.2 + CVD not opposing + OB aligned.
 
-  ABSORPTION: CVD is eating the wall in real-time (≥40% of peak qty absorbed).
-              Expects a break-through; SL is ATR-based on the near side.
+  ABSORPTION Wall is actively being eaten (≥40 % absorbed in last 30 s).
+             Entry: market order — window is narrow, wall won't last.
+             Thesis: wall breaks → price continues through it.
+             Filters: round number + wall stable + absorption ≥40 %
+                      + CVD strongly in direction.
+             (level touches NOT required — persistent absorption already
+              proves the level was real and held long enough.)
 
-Both sub-setups use market entry (same as EARLY_MOMENTUM) because the edge
-window is narrow — walls can move or disappear quickly.
-
-Regime: works in ALL regimes. Absorption favours trending; bounce favours
-ranging/low-vol but is allowed everywhere.
+The two setups never conflict: absorption is checked first; if found, bounce
+is skipped entirely.  If absorption is zero (wall intact, not being eaten),
+bounce is evaluated.
 """
 from __future__ import annotations
 
 from data.cache import MarketRegime, MarketSnapshot
-from data.indicators import find_wall, order_book_imbalance, wall_absorption_pct
+from data.indicators import (
+    find_wall,
+    order_book_imbalance,
+    wall_absorption_pct,
+    wall_stable,
+    wall_on_round_number,
+    count_level_touches,
+    vei,
+)
 from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
 from strategies.base_strategy import BaseStrategy
 
 # ---------------------------------------------------------------------------
 # Strategy constants
 # ---------------------------------------------------------------------------
-BOUNCE_DIST_PCT: float = 0.003    # price within 0.3 % of wall to qualify
-ABSORPTION_PCT: float = 0.40      # ≥40 % wall qty absorbed = active absorption
-MIN_CVD_BUILD: float = 150.0      # minimum |CVD delta 1m| for absorption
-SL_BUFFER_PCT: float = 0.0008     # 0.08 % buffer beyond wall for bounce SL
-MAX_SL_PCT: float = 0.008         # hard cap: never risk more than 0.8 %
-MIN_RR: float = 1.5               # minimum reward-to-risk ratio
+BOUNCE_DIST_PCT: float  = 0.003   # price within 0.3 % of wall to enter
+BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
+ABSORPTION_PCT: float   = 0.40    # ≥40 % wall qty absorbed = active absorption
+MIN_CVD_BUILD: float    = 150.0   # minimum |CVD delta 1m| for absorption
+WALL_MIN_SECS: float    = 5.0     # wall must be present ≥5 s (spoof filter)
+VEI_MAX_BOUNCE: float   = 1.2     # bounce skipped when ATR(10)/ATR(50) > 1.2
+BOUNCE_MIN_TOUCHES: int = 2       # level must have been tested ≥2 times
+SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
+MAX_SL_PCT: float       = 0.008   # hard cap: never risk more than 0.8 %
+MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
 
 
 class WallBounce(BaseStrategy):
@@ -76,7 +92,9 @@ class WallBounce(BaseStrategy):
         # LONG: ask wall being absorbed by buyers (price below wall, buyers pressing up)
         if ask_wall:
             wp, wq = ask_wall
-            if snap.price < wp:
+            if (snap.price < wp
+                    and wall_on_round_number(wp)
+                    and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)):
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m >= MIN_CVD_BUILD:
                     entry = snap.ask
@@ -97,7 +115,9 @@ class WallBounce(BaseStrategy):
         # SHORT: bid wall being absorbed by sellers (price above wall, sellers pressing down)
         if bid_wall:
             wp, wq = bid_wall
-            if snap.price > wp:
+            if (snap.price > wp
+                    and wall_on_round_number(wp)
+                    and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)):
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_1m <= -MIN_CVD_BUILD:
                     entry = snap.bid
@@ -126,14 +146,23 @@ class WallBounce(BaseStrategy):
         ml_boost: float,
     ) -> Signal | None:
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
+        klines = list(snap.klines_1m)
 
-        # LONG: large bid wall below, price approaching from above → expect bounce
+        # VEI filter applies to the entire bounce setup — skip if volatility expanding
+        if vei(klines) > VEI_MAX_BOUNCE:
+            return None
+
+        # LONG: large bid wall below, price approaching from above → limit entry above wall
         if bid_wall:
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                if snap.cvd_delta_1m >= 0 and ob >= 0.48:
-                    entry = snap.ask
+                if (wall_on_round_number(wp)
+                        and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
+                        and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
+                        and snap.cvd_delta_1m >= 0
+                        and ob >= 0.48):
+                    entry = wp * (1 + BOUNCE_ENTRY_GAP)  # limit just above wall (maker)
                     sl = wp * (1 - SL_BUFFER_PCT)
                     sl_dist = (entry - sl) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
@@ -144,13 +173,17 @@ class WallBounce(BaseStrategy):
                         ob, 0.0, "bounce", ap, ml_boost, wq,
                     )
 
-        # SHORT: large ask wall above, price approaching from below → expect bounce down
+        # SHORT: large ask wall above, price approaching from below → limit entry below wall
         if ask_wall:
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                if snap.cvd_delta_1m <= 0 and ob <= 0.52:
-                    entry = snap.bid
+                if (wall_on_round_number(wp)
+                        and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
+                        and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
+                        and snap.cvd_delta_1m <= 0
+                        and ob <= 0.52):
+                    entry = wp * (1 - BOUNCE_ENTRY_GAP)  # limit just below wall (maker)
                     sl = wp * (1 + SL_BUFFER_PCT)
                     sl_dist = (sl - entry) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:

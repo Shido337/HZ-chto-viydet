@@ -333,3 +333,7 @@ Files: data/indicators.py
 ## [2026-04-06 20:08 UTC]
 revert: restore all files to 880f649 (clean initial WallBounce) — start fresh
 Files: data/indicators.py, data/cache.py, core/bot_engine.py, strategies/wall_bounce.py
+
+## [2026-04-06 20:20 UTC]
+WB: CScalp filters — round number, wall_stable 5s, level touches, VEI; limit entry for bounce
+Files: data/indicators.py, strategies/wall_bounce.py
