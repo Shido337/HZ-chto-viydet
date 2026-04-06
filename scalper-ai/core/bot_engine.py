@@ -419,8 +419,8 @@ class BotEngine:
 
             # WallBounce diagnosis (all regimes)
             from data.indicators import find_wall, wall_absorption_pct
-            bid_wall = find_wall(snap.depth_bids)
-            ask_wall = find_wall(snap.depth_asks)
+            bid_wall = find_wall(snap.depth_bids, mid_price=snap.price)
+            ask_wall = find_wall(snap.depth_asks, mid_price=snap.price)
             if bid_wall or ask_wall:
                 parts: list[str] = []
                 if bid_wall:

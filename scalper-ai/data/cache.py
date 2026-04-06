@@ -270,9 +270,16 @@ class MarketCache:
 
     @staticmethod
     def _detect_wall(
-        levels: list[tuple[float, float]], mult: float = WALL_MULTIPLIER,
+        levels: list[tuple[float, float]],
+        mult: float = WALL_MULTIPLIER,
+        mid_price: float = 0.0,
+        max_dist_pct: float = 0.05,
     ) -> tuple[float, float]:
         """Returns (wall_price, wall_qty) or (0.0, 0.0) if no wall detected."""
+        if mid_price > 0:
+            lo = mid_price * (1.0 - max_dist_pct)
+            hi = mid_price * (1.0 + max_dist_pct)
+            levels = [(p, q) for p, q in levels if lo <= p <= hi]
         if len(levels) < 5:
             return 0.0, 0.0
         qtys = [q for _, q in levels if q > 0]
@@ -324,8 +331,16 @@ class MarketCache:
         async with self._lock(symbol):
             self.depth_bids[symbol] = bids
             self.depth_asks[symbol] = asks
-            bp, bq = self._detect_wall(bids)
-            ap, aq = self._detect_wall(asks)
+            # Compute mid from best bid/ask to apply 5% window for wall_history
+            mid = 0.0
+            if bids and asks:
+                mid = (bids[0][0] + asks[0][0]) / 2.0
+            elif bids:
+                mid = bids[0][0]
+            elif asks:
+                mid = asks[0][0]
+            bp, bq = self._detect_wall(bids, mid_price=mid)
+            ap, aq = self._detect_wall(asks, mid_price=mid)
             self.wall_history[symbol].append(WallSnapshot(
                 ts=time.time(),
                 bid_wall_price=bp, bid_wall_qty=bq,
