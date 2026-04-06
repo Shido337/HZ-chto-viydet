@@ -146,8 +146,7 @@ class WallBounce(BaseStrategy):
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
 
         # LONG: large bid wall below, price approaching from above → expect bounce
-        # Block in TRENDING_BEAR — bid walls get consumed; bounce thesis fails.
-        if bid_wall and snap.regime != MarketRegime.TRENDING_BEAR:
+        if bid_wall:
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
             if (
@@ -171,8 +170,7 @@ class WallBounce(BaseStrategy):
                 )
 
         # SHORT: large ask wall above, price approaching from below → expect bounce down
-        # Block in TRENDING_BULL — ask walls get consumed; bounce thesis fails.
-        if ask_wall and snap.regime != MarketRegime.TRENDING_BULL:
+        if ask_wall:
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if (

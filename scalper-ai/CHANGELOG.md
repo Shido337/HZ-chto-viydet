@@ -255,3 +255,7 @@ Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py
 ## [2026-04-06 12:17 UTC]
 WB: regime filter (no LONG in BEAR/no SHORT in BULL), wall_stable spoof filter, wall_qty_at_price, WALL_MULT=5, wall_absorbed only when losing
 Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py, data/indicators.py, data/cache.py
+
+## [2026-04-06 12:22 UTC]
+revert: WB regime filter removed — walls fire in any regime by design
+Files: strategies/wall_bounce.py
