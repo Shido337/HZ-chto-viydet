@@ -263,3 +263,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-06 13:00 UTC]
 WB: remove wall_absorbed exit from open positions — SL handles wall break, wall_absorbed was firing in 500ms on spoofs
 Files: core/paper_trader.py
+
+## [2026-04-06 13:08 UTC]
+WB absorption: fix — entry BEFORE wall breaks (price approaching + 30% eaten), not after. Absorption now actually fires.
+Files: strategies/wall_bounce.py

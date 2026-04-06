@@ -79,24 +79,29 @@ class WallBounce(BaseStrategy):
     ) -> Signal | None:
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
 
-        # LONG: ask wall being eaten by buyers → price must already be AT or PAST the wall
+        # LONG: ask wall being gradually eaten by buyers.
+        # Entry is BEFORE price breaks through — anticipate the breakout.
+        # Price must still be BELOW (approaching) the wall so we can get a good fill.
         if ask_wall:
             wp, wq = ask_wall
+            dist_to_wall = (wp - snap.price) / snap.price if snap.price else 1.0
             abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
             if (
                 abs_pct >= ABSORPTION_PCT
                 and snap.cvd_delta_1m >= MIN_CVD_BUILD
-                and snap.price >= wp  # price already broke through wall
-                and wall_is_eaten(snap.wall_history, wp, "ask")  # gradual, not spoofed
+                and dist_to_wall <= BOUNCE_DIST_PCT  # price is close but not past wall yet
+                and wall_is_eaten(snap.wall_history, wp, "ask")  # gradual eating, not spoof
             ):
-                entry = snap.ask
+                entry = snap.ask  # market entry — breakout is imminent
                 atr = ap.atr_value
-                raw_sl = wp * (1 - SL_BUFFER_PCT)  # SL just below the eaten wall
+                # SL just below the wall (if eaten wall holds as support after break, it's fine;
+                # if it doesn't — we exit quickly)
+                raw_sl = wp * (1 - SL_BUFFER_PCT)
                 sl = max(raw_sl, entry * (1 - MAX_SL_PCT))
                 sl_dist = (entry - sl) / entry
                 if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                     return None
-                tp = entry + atr * 1.5 if atr > 0 else entry + (entry - sl) * MIN_RR
+                tp = entry + atr * 2.0 if atr > 0 else entry + (entry - sl) * MIN_RR
                 if tp <= entry:
                     tp = entry + (entry - sl) * MIN_RR
                 return self._build(
@@ -104,24 +109,26 @@ class WallBounce(BaseStrategy):
                     ob, abs_pct, "absorption", ap, ml_boost, wq,
                 )
 
-        # SHORT: bid wall being eaten by sellers → price must already be AT or BELOW the wall
+        # SHORT: bid wall being gradually eaten by sellers.
+        # Entry BEFORE price breaks down — anticipate the breakdown.
         if bid_wall:
             wp, wq = bid_wall
+            dist_to_wall = (snap.price - wp) / wp if wp else 1.0
             abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
             if (
                 abs_pct >= ABSORPTION_PCT
                 and snap.cvd_delta_1m <= -MIN_CVD_BUILD
-                and snap.price <= wp  # price already broke through wall
-                and wall_is_eaten(snap.wall_history, wp, "bid")  # gradual, not spoofed
+                and dist_to_wall <= BOUNCE_DIST_PCT  # price close but not past wall yet
+                and wall_is_eaten(snap.wall_history, wp, "bid")  # gradual eating, not spoof
             ):
                 entry = snap.bid
                 atr = ap.atr_value
-                raw_sl = wp * (1 + SL_BUFFER_PCT)  # SL just above the eaten wall
+                raw_sl = wp * (1 + SL_BUFFER_PCT)
                 sl = min(raw_sl, entry * (1 + MAX_SL_PCT))
                 sl_dist = (sl - entry) / entry
                 if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                     return None
-                tp = entry - atr * 1.5 if atr > 0 else entry - (sl - entry) * MIN_RR
+                tp = entry - atr * 2.0 if atr > 0 else entry - (sl - entry) * MIN_RR
                 if tp >= entry:
                     tp = entry - (sl - entry) * MIN_RR
                 return self._build(
