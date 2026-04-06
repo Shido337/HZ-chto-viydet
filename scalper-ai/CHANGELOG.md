@@ -325,3 +325,7 @@ Files: core/bot_engine.py, core/coin_screener.py, core/paper_trader.py, data/ind
 ## [2026-04-06 19:48 UTC]
 WB: CScalp filters — round number, level touches (>=2), BTC leader (povodyr)
 Files: data/indicators.py, data/cache.py, core/bot_engine.py, strategies/wall_bounce.py
+
+## [2026-04-06 20:05 UTC]
+fix: wall_on_round_number — remove fine divisors (25+), fixes false positives on 84783/16783
+Files: data/indicators.py

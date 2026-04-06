@@ -288,25 +288,24 @@ def wall_on_round_number(price: float, tolerance: float = 0.001) -> bool:
     CScalp rule: real walls stand on round numbers (22500, 84000, 130).
     Spoofers place at irregular prices (16783, 131.37) and pull quickly.
 
-    Algorithm: price is "round" if it's an exact multiple of some unit that
-    is at least 0.1% of the price magnitude — meaning the price has a lot of
-    trailing zeros at that scale.
+    Algorithm: meaningful units are magnitude / {1,2,4,5,10,20} only.
+    This keeps the coarsest grid: for BTC ~85 000 the finest unit is 500;
+    for SOL ~130 it is 5.  Sub-500 / sub-5 grids produce false positives
+    because nearly ANY price lands within 0.1 % of some multiple.
 
     Examples:
       wall_on_round_number(85000)  → True  (85000 = 17 × 5000)
-      wall_on_round_number(84500)  → True  (84500 = 169 × 500)
-      wall_on_round_number(84783)  → False (not divisible by anything ≥ 85)
-      wall_on_round_number(130.0)  → True  (130 = 13 × 10)
-      wall_on_round_number(131.37) → False (not divisible by anything ≥ 0.13)
+      wall_on_round_number(84500)  → True  (169 × 500)
+      wall_on_round_number(84783)  → False (nearest 500-multiple is 85000, 0.26 % away)
+      wall_on_round_number(130.0)  → True  (13 × 10)
+      wall_on_round_number(131.37) → False (nearest 5-multiple is 130, 1.04 % away)
     """
     if price <= 0:
         return False
     magnitude = 10 ** math.floor(math.log10(price))
-    # Check standard sub-divisions of the order of magnitude
-    for divisor in (1, 2, 4, 5, 10, 20, 25, 50, 100, 200, 500, 1000):
+    # Only coarse sub-divisions — finest unit is magnitude/20
+    for divisor in (1, 2, 4, 5, 10, 20):
         unit = magnitude / divisor
-        if unit <= 0:
-            continue
         nearest = round(price / unit) * unit
         if abs(price - nearest) / price <= tolerance:
             return True
