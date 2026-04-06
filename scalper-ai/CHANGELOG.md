@@ -271,3 +271,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-06 13:15 UTC]
 WB: bounce-absorption flip -- if wall eaten 30% while pending/open, cancel/close and let absorption signal fire next tick
 Files: core/paper_trader.py
+
+## [2026-04-06 13:18 UTC]
+bot_engine: LOOP_INTERVAL 1s->0.1s for positions+pending, SIGNAL_INTERVAL=1s for signal search -- matches depth WS 100ms
+Files: core/bot_engine.py

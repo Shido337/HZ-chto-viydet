@@ -29,7 +29,8 @@ load_dotenv()
 # Constants
 # ---------------------------------------------------------------------------
 REGIME_UPDATE_INTERVAL = 30  # seconds
-LOOP_INTERVAL = 1.0
+LOOP_INTERVAL = 0.1          # positions + pending checked at 100ms (matches depth WS update rate)
+SIGNAL_INTERVAL = 1.0        # new signal search every 1s (CPU-intensive, no need faster)
 MAX_CONSECUTIVE_ERRORS = 10
 MAX_SIGNALS_HISTORY = 200
 
@@ -81,6 +82,7 @@ class BotEngine:
         self._consecutive_errors = 0
         self._last_regime_update = 0.0
         self._last_status_log = 0.0
+        self._last_signal_search = 0.0
         self._tick_count = 0
         self._on_trade_close: Any = None  # callback for server WS
         self._on_signal: Any = None
@@ -240,6 +242,11 @@ class BotEngine:
 
         if self.risk.check_daily_limit():
             return
+
+        # Generate new signals — only every SIGNAL_INTERVAL seconds
+        if now - self._last_signal_search < SIGNAL_INTERVAL:
+            return
+        self._last_signal_search = now
 
         # Generate new signals
         for symbol in self.symbols:
