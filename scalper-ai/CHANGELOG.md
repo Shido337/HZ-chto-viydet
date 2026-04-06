@@ -267,3 +267,7 @@ Files: core/paper_trader.py
 ## [2026-04-06 13:08 UTC]
 WB absorption: fix — entry BEFORE wall breaks (price approaching + 30% eaten), not after. Absorption now actually fires.
 Files: strategies/wall_bounce.py
+
+## [2026-04-06 13:15 UTC]
+WB: bounce-absorption flip -- if wall eaten 30% while pending/open, cancel/close and let absorption signal fire next tick
+Files: core/paper_trader.py

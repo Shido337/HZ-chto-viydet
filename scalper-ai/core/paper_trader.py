@@ -208,22 +208,27 @@ class PaperTrader:
                     f"@ {order.entry_price:.6f} (not filled in {timeout}s)",
                 )
 
-            # WB bounce: cancel if wall qty dropped below 30% of original
+            # WB bounce: cancel if wall qty dropped below 5% (spoof/pulled)
+            # OR if wall is being gradually absorbed (eaten → pending fills → breakout imminent)
             elif (
                 order.setup_type == SetupType.WALL_BOUNCE
                 and order.signal.wall_ref_price > 0
             ):
-                from data.indicators import wall_qty_at_price
+                from data.indicators import wall_qty_at_price, wall_is_eaten, wall_absorption_pct
                 snap2 = self.cache.get_snapshot(symbol)
                 depth = snap2.depth_bids if order.direction == Direction.LONG else snap2.depth_asks
+                wall_side = "bid" if order.direction == Direction.LONG else "ask"
                 current_qty = wall_qty_at_price(depth, order.signal.wall_ref_price)
                 ref_qty = order.signal.wall_ref_qty or 1.0
-                wall_ok = current_qty >= ref_qty * 0.05  # wall still has ≥5% — not fully pulled
-                if wall_ok:
-                    self._wall_miss.pop(symbol, None)
-                else:
+                wall_pulled = current_qty < ref_qty * 0.05  # spoof — wall fully removed
+                being_eaten = (
+                    wall_is_eaten(snap2.wall_history, order.signal.wall_ref_price, wall_side)
+                    and wall_absorption_pct(snap2.wall_history, order.signal.wall_ref_price, wall_side) >= 0.30
+                )  # wall is being gradually absorbed → expect breakout, not bounce
+                if wall_pulled or being_eaten:
                     miss = self._wall_miss.get(symbol, 0) + 1
                     self._wall_miss[symbol] = miss
+                    reason_str = "absorption" if being_eaten else "pulled"
                     if miss >= WALL_MISS_GRACE:
                         del self.pending[symbol]
                         self._wall_miss.pop(symbol, None)
@@ -232,8 +237,10 @@ class PaperTrader:
                             f"[PAPER] WB CANCELLED {symbol} "
                             f"wall {order.signal.wall_ref_price:.6f} "
                             f"qty {current_qty:.0f}/{ref_qty:.0f} "
-                            f"({miss} consecutive misses)",
+                            f"({miss} consecutive misses, {reason_str})",
                         )
+                else:
+                    self._wall_miss.pop(symbol, None)
 
         return filled, expired
 
@@ -268,11 +275,23 @@ class PaperTrader:
             self._check_breakeven(pos, snap.price, ap)
             self._check_trailing(pos, snap.price, ap)
             exit_result = self._check_exits(pos, snap)
-            # Wall-disappearance check removed for positions.
-            # Rationale: SL is placed just beyond the wall — if price breaks the
-            # wall the SL fires. If MM simply pulls the wall after our fill
-            # (spoofing), exiting immediately locks in a loss before price had a
-            # chance to move. SL/TP/CVD/time_stop cover all real exit scenarios.
+            # WB bounce: if wall is NOW being gradually absorbed, bounce thesis flipped.
+            # Close the bounce position — on the next tick absorption signal fires (market entry).
+            if (
+                exit_result is None
+                and pos.setup_type == SetupType.WALL_BOUNCE
+                and pos.signal.wall_ref_price > 0
+                and (time.time() - pos.opened_at) >= 3  # min hold to avoid immediate flip
+            ):
+                from data.indicators import wall_is_eaten, wall_absorption_pct
+                wall_side = "bid" if pos.direction == Direction.LONG else "ask"
+                wp = pos.signal.wall_ref_price
+                being_eaten = (
+                    wall_is_eaten(snap.wall_history, wp, wall_side)
+                    and wall_absorption_pct(snap.wall_history, wp, wall_side) >= 0.30
+                )
+                if being_eaten:
+                    exit_result = ("wall_absorption_flip", snap.price)
             if exit_result:
                 reason, exit_price = exit_result
                 p = self.close_position(symbol, exit_price, reason)
