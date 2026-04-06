@@ -275,7 +275,7 @@ class MarketCache:
         levels: list[tuple[float, float]],
         mult: float = WALL_MULTIPLIER,
         mid_price: float = 0.0,
-        max_dist_pct: float = 0.05,
+        max_dist_pct: float = 0.03,
     ) -> tuple[float, float]:
         """Returns (wall_price, wall_qty) or (0.0, 0.0) if no wall detected."""
         if mid_price > 0:

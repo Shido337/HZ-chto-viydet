@@ -42,7 +42,8 @@ BOUNCE_DIST_PCT: float  = 0.003   # price within 0.3 % of wall to enter
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
 ABSORPTION_PCT: float   = 0.55    # ≥55 % wall qty absorbed = active absorption
 MIN_CVD_BUILD: float    = 150.0   # minimum |CVD delta 1m| for absorption
-WALL_MIN_SECS: float    = 5.0     # wall must be present ≥5 s (spoof filter)
+WALL_MIN_SECS: float       = 5.0     # wall must be present ≥5 s (spoof filter)
+MAX_ABSORPTION_DIST_PCT: float = 0.015  # wall must be within 1.5% of price for absorption
 VEI_MAX_BOUNCE: float   = 1.2     # bounce skipped when ATR(10)/ATR(50) > 1.2
 BOUNCE_MIN_TOUCHES: int = 2       # level must have been tested ≥2 times
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
@@ -93,7 +94,9 @@ class WallBounce(BaseStrategy):
         # LONG: ask wall being absorbed by buyers (price below wall, buyers pressing up)
         if ask_wall:
             wp, wq = ask_wall
+            ask_dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if (snap.price < wp
+                    and ask_dist <= MAX_ABSORPTION_DIST_PCT
                     and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)):
                 # round_number NOT required — a 40%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
@@ -116,7 +119,9 @@ class WallBounce(BaseStrategy):
         # SHORT: bid wall being absorbed by sellers (price above wall, sellers pressing down)
         if bid_wall:
             wp, wq = bid_wall
+            bid_dist = (snap.price - wp) / wp if wp else 1.0
             if (snap.price > wp
+                    and bid_dist <= MAX_ABSORPTION_DIST_PCT
                     and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)):
                 # round_number NOT required — a 55%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")

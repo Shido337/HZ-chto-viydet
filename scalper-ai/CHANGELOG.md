@@ -29,3 +29,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-06 23:16 UTC]
 fix: stable log-scale bucketing; revert direction block in WallBounce
 Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py
+
+## [2026-04-06 23:20 UTC]
+fix: floor() in bucket_levels, BUCKET_PCT 0.001->0.003, dist 5%->3%, absorption dist cap 1.5%
+Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py

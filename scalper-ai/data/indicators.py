@@ -220,9 +220,9 @@ def volume_spike_ratio(candles: list[dict[str, Any]], period: int = 20) -> float
 # Order-book wall helpers (for WallBounce strategy)
 # ---------------------------------------------------------------------------
 
-# Adaptive bucketing: merge price levels within this fraction of mid_price.
-# 0.001 = 0.1% → for SIREN @0.60 that is ~0.0006 per bucket (≈3 ticks).
-BUCKET_PCT = 0.001
+# Adaptive bucketing: merge price levels within this fraction of price.
+# 0.003 = 0.3% → at MMTUSDT@0.12 → 0.00036/bucket ≈ 3-4 ticks merged.
+BUCKET_PCT = 0.003
 
 
 def bucket_levels(
@@ -244,7 +244,7 @@ def bucket_levels(
     for price, qty in levels:
         if price <= 0:
             continue
-        idx = int(math.log(price) / log_step)
+        idx = math.floor(math.log(price) / log_step)
         totals[idx] = totals.get(idx, 0.0) + qty
         prev_best = best.get(idx, (0.0, price))
         if qty > prev_best[0]:
@@ -256,7 +256,7 @@ def find_wall(
     levels: tuple | list,
     multiplier: float = 5.0,
     mid_price: float = 0.0,
-    max_dist_pct: float = 0.05,
+    max_dist_pct: float = 0.03,
     bucket_pct: float = BUCKET_PCT,
 ) -> tuple[float, float] | None:
     """Detect dominant order wall in a sequence of (price, qty) depth levels.
