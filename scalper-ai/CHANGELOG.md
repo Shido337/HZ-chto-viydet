@@ -1,5 +1,11 @@
 # SCALPER-AI CHANGELOG
 
+## [2026-04-06 17:38 UTC]
+WB: revert cvd_path in absorption — was causing market entry spam
+cvd_path (cvd>=1000 near any wall) fired constantly, generating large-risk
+market entries at 0.8% SL. Original qty-based absorption (abs_pct>=0.30 + wall_is_eaten)
+is the correct high-conviction gate. CVD_FLIP cancel in paper_trader kept.
+
 ## [2026-04-06 17:08 UTC]
 WB: CVD-sweep detection — cancel bounce fill, let absorption enter breakout
 Problem: bounce limits were filling even when CVD was strongly AGAINST direction
