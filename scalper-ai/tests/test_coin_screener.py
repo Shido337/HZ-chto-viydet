@@ -15,8 +15,8 @@ from core.coin_screener import (
 
 def _make_ticker(
     symbol: str,
-    quote_volume: float = 100_000_000.0,
-    price_change_pct: float = 5.0,
+    quote_volume: float = 200_000_000.0,
+    price_change_pct: float = 15.0,
     trade_count: int = 500_000,
 ) -> dict:
     return {
@@ -67,13 +67,13 @@ class TestCoinScreener:
         assert result == []
 
     def test_filters_low_volatility(self) -> None:
-        tickers = [_make_ticker("TOKENUSDT", price_change_pct=0.3)]
+        tickers = [_make_ticker("TOKENUSDT", price_change_pct=2.0)]  # below 10%
         books = [_make_book("TOKENUSDT")]
         result = self.screener.screen(tickers, books)
         assert result == []
 
     def test_filters_extreme_volatility(self) -> None:
-        tickers = [_make_ticker("TOKENUSDT", price_change_pct=50.0)]
+        tickers = [_make_ticker("TOKENUSDT", price_change_pct=50.0)]  # above 40%
         books = [_make_book("TOKENUSDT")]
         result = self.screener.screen(tickers, books)
         assert result == []
@@ -93,8 +93,8 @@ class TestCoinScreener:
 
     def test_ranks_by_composite_score(self) -> None:
         tickers = [
-            _make_ticker("LOWUSDT", quote_volume=110_000_000, price_change_pct=2.0),
-            _make_ticker("HIGHUSDT", quote_volume=300_000_000, price_change_pct=10.0,
+            _make_ticker("LOWUSDT", quote_volume=160_000_000, price_change_pct=12.0),
+            _make_ticker("HIGHUSDT", quote_volume=300_000_000, price_change_pct=25.0,
                          trade_count=800_000),
         ]
         books = [
@@ -148,7 +148,8 @@ class TestCoinScreener:
         assert result == []
 
     def test_negative_price_change_uses_abs(self) -> None:
-        tickers = [_make_ticker("TOKENUSDT", price_change_pct=-5.0)]
+        # -15% should pass abs filter (10-40% range)
+        tickers = [_make_ticker("TOKENUSDT", price_change_pct=-15.0)]
         books = [_make_book("TOKENUSDT")]
         result = self.screener.screen(tickers, books)
         assert result == ["TOKENUSDT"]

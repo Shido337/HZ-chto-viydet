@@ -341,3 +341,7 @@ Files: data/indicators.py, strategies/wall_bounce.py
 ## [2026-04-06 20:22 UTC]
 tests: fix coin_screener tests for updated EXCLUDED_SYMBOLS and MIN_QUOTE_VOLUME thresholds
 Files: tests/test_coin_screener.py
+
+## [2026-04-06 20:29 UTC]
+screener: raise vol range to 10-40%, min volume $150M, min trades 200k
+Files: core/coin_screener.py, tests/test_coin_screener.py
