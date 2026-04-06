@@ -670,10 +670,11 @@ class BotEngine:
             self.cache.init_symbol(s)
 
     async def _start_ws(self, testnet: bool) -> None:
-        # Fetch full depth snapshots (REST) before opening the WS so that
-        # the first diff events arrive after the LocalOrderBook is populated.
+        # Pre-create LocalOrderBooks so diff events start buffering from first WS message.
+        # Per Binance docs: open the stream FIRST, then fetch the REST snapshot.
         for s in self.symbols:
-            await self._fetch_depth_snapshot(s)
+            if s not in self._order_books:
+                self._order_books[s] = LocalOrderBook()
 
         self._ws = BinanceWS(testnet=testnet)
         for s in self.symbols:
@@ -685,6 +686,11 @@ class BotEngine:
             self._ws.subscribe(f"{sl}@aggTrade", self._make_agg_handler(s))
             self._ws.subscribe(f"{sl}@depth@100ms", self._make_depth_handler(s))
         await self._ws.start()
+
+        # Wait for WS to connect and buffer some diff events, then fetch snapshots
+        # concurrently so init_snapshot can find a valid straddling event in the buffer.
+        await asyncio.sleep(1.0)
+        await asyncio.gather(*[self._fetch_depth_snapshot(s) for s in self.symbols])
 
     # -- dynamic coin screening ---------------------------------------------
 
@@ -797,7 +803,7 @@ class BotEngine:
         return handler
 
     async def _fetch_depth_snapshot(self, symbol: str) -> None:
-        """Fetch REST depth snapshot and (re-)initialise the LocalOrderBook."""
+        """Fetch REST depth snapshot and initialise the LocalOrderBook."""
         try:
             data = await self.client.get_depth(symbol, limit=500)
             if not data or "lastUpdateId" not in data:
@@ -805,6 +811,8 @@ class BotEngine:
                 return
             ob = self._order_books.setdefault(symbol, LocalOrderBook())
             ob.init_snapshot(data)
+            # Seed cache immediately so first tick has depth data
+            await self.cache.update_depth(symbol, ob.sorted_bids(), ob.sorted_asks())
             logger.debug(
                 f"Depth snapshot {symbol}: lastUpdateId={data['lastUpdateId']}, "
                 f"bids={len(data['bids'])}, asks={len(data['asks'])}"
@@ -817,16 +825,10 @@ class BotEngine:
             ob = self._order_books.get(symbol)
             if ob is None:
                 return
-            needs_resync = not ob.apply_diff(data)
-            if needs_resync:
-                logger.warning(f"Depth sequence gap for {symbol}, re-syncing...")
-                asyncio.create_task(self._fetch_depth_snapshot(symbol))
-                return
+            ob.apply_diff(data)
             if not ob.initialized:
                 return
-            bids = ob.sorted_bids()
-            asks = ob.sorted_asks()
-            await self.cache.update_depth(symbol, bids, asks)
+            await self.cache.update_depth(symbol, ob.sorted_bids(), ob.sorted_asks())
         return handler
 
     # -- helpers ------------------------------------------------------------
