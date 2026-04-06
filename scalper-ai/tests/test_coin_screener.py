@@ -79,10 +79,11 @@ class TestCoinScreener:
         assert result == []
 
     def test_filters_low_trade_count(self) -> None:
+        # trade count filter disabled (MIN=0), any count passes
         tickers = [_make_ticker("TOKENUSDT", trade_count=10_000)]
         books = [_make_book("TOKENUSDT")]
         result = self.screener.screen(tickers, books)
-        assert result == []
+        assert result == ["TOKENUSDT"]
 
     def test_filters_wide_spread(self) -> None:
         # spread = (1.01 - 1.0) / 1.005 ≈ 0.995% >> 0.05%

@@ -8,11 +8,11 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # Screening thresholds
 # ---------------------------------------------------------------------------
-MIN_QUOTE_VOLUME_24H = 150_000_000.0   # $150M min 24h USDT volume — high-vol coins need real liquidity
-MAX_SPREAD_PCT = 0.0008                  # 0.08% max bid-ask spread — volatile coins have slightly wider spreads
-MIN_PRICE_CHANGE_PCT = 10.0             # min 10% daily move — want real volatility
-MAX_PRICE_CHANGE_PCT = 40.0             # max 40% daily move — above this = pure pump, no structure
-MIN_TRADE_COUNT_24H = 200_000           # min 200k trades — high-vol coins must have real participation
+MIN_QUOTE_VOLUME_24H = 100_000_000.0   # $100M min 24h USDT volume
+MAX_SPREAD_PCT = 0.0008                  # 0.08% max bid-ask spread
+MIN_PRICE_CHANGE_PCT = 10.0             # min 10% daily move
+MAX_PRICE_CHANGE_PCT = 40.0             # max 40% daily move
+MIN_TRADE_COUNT_24H = 0                 # no trade count filter
 MAX_SYMBOLS = 10                        # top N to select (was 12 — quality > quantity)
 SCREENER_INTERVAL = 300                 # re-screen every 5 minutes
 
