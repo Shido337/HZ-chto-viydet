@@ -165,6 +165,10 @@ class WallBounce(BaseStrategy):
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
+                # Regime guard: bid walls break under strong bear trend (TRENDING_BEAR)
+                # Don't fight directional pressure — walls only hold in neutral/aligned regimes
+                if snap.regime == MarketRegime.TRENDING_BEAR:
+                    return None
                 touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "bid")
@@ -186,6 +190,9 @@ class WallBounce(BaseStrategy):
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
+                # Regime guard: ask walls break under strong bull trend (TRENDING_BULL)
+                if snap.regime == MarketRegime.TRENDING_BULL:
+                    return None
                 touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "ask")

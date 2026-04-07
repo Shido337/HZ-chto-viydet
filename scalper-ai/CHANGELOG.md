@@ -209,3 +209,7 @@ Files: data/indicators.py, data/cache.py
 ## [2026-04-07 11:30 UTC]
 fix: bounce scoring rework — remove CVD/OB filters, score by wall proximity+touches+age. Bounce momentum starts AT wall not before.
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 12:43 UTC]
+fix: bounce regime guard — block LONG in TRENDING_BEAR, SHORT in TRENDING_BULL. Trend pressure breaks walls in these regimes.
+Files: strategies/wall_bounce.py
