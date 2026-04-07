@@ -197,3 +197,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 10:59 UTC]
 feat: improved wall detection — 8x median (was 5x), 2% range (was 3%), max 5 ticks concentration check
 Files: data/indicators.py, data/cache.py
+
+## [2026-04-07 11:02 UTC]
+tune: remove MIN_WALL_USD filter — 8x median multiplier is sufficient quality gate
+Files: strategies/wall_bounce.py

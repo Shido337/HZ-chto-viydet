@@ -46,7 +46,6 @@ BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
 MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
-MIN_WALL_USD: float     = 20_000  # wall must be worth ≥$20K — skip noise walls
 
 
 class WallBounce(BaseStrategy):
@@ -63,11 +62,6 @@ class WallBounce(BaseStrategy):
         mid = snap.price
         bid_wall = find_wall(snap.depth_bids, mid_price=mid)
         ask_wall = find_wall(snap.depth_asks, mid_price=mid)
-        # Filter out noise walls — must be worth at least $50K USD
-        if bid_wall and bid_wall[0] * bid_wall[1] < MIN_WALL_USD:
-            bid_wall = None
-        if ask_wall and ask_wall[0] * ask_wall[1] < MIN_WALL_USD:
-            ask_wall = None
         if bid_wall is None and ask_wall is None:
             return None  # no significant wall on either side
 
