@@ -201,7 +201,8 @@ class EarlyMomentum(BaseStrategy):
         entry = snap.price
         max_sl_dist = atr_val * (1.0 if is_trending else ap.max_sl_atr)
         min_sl_dist = atr_val * ap.min_sl_atr
-        # Hard cap: SL can't exceed 1.5% of entry price for any EM trade
+        # Hard limits: 0.5% floor (noise filter) and 1.5% cap
+        hard_floor = entry * 0.005
         hard_cap = entry * 0.015
         if d == Direction.LONG:
             raw_risk = entry - comp_low
@@ -211,7 +212,7 @@ class EarlyMomentum(BaseStrategy):
         if raw_risk > max_sl_dist:
             return None
 
-        risk = max(raw_risk, min_sl_dist)
+        risk = max(raw_risk, min_sl_dist, hard_floor)
         risk = min(risk, hard_cap)  # never exceed 1.5% of price
         if risk <= 0 or (raw_risk > 0 and risk > raw_risk * 3):
             return None
