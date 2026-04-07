@@ -400,12 +400,17 @@ class PaperTrader:
     def _check_breakeven(pos: Position, price: float, ap: AdaptiveParams) -> None:
         if pos.breakeven_moved:
             return
-        atr_val = ap.atr_value
-        if atr_val > 0:
-            trigger = atr_val * ap.breakeven_trigger_atr
+        risk = pos.original_risk or abs(pos.entry_price - pos.sl_price)
+        # WB has very tight SL (0.08%) — ATR-based trigger is always larger than TP,
+        # so use 50% of TP distance (risk * tp_rr * 0.5) for WB setups
+        if pos.setup_type == SetupType.WALL_BOUNCE:
+            trigger = risk * ap.tp_rr * 0.5
         else:
-            risk = pos.original_risk or abs(pos.entry_price - pos.sl_price)
-            trigger = risk * BREAKEVEN_TRIGGER_RR
+            atr_val = ap.atr_value
+            if atr_val > 0:
+                trigger = atr_val * ap.breakeven_trigger_atr
+            else:
+                trigger = risk * BREAKEVEN_TRIGGER_RR
         # Offset BE by round-trip fees so "breakeven" doesn't lose money
         fee_buffer = pos.entry_price * (MAKER_FEE + TAKER_FEE)
         if pos.direction == Direction.LONG:

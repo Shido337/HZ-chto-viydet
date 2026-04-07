@@ -347,3 +347,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 20:12 UTC]
 fix: revert tp_rr to 1.5 (was 2.0)
 Files: data/cache.py
+
+## [2026-04-07 20:35 UTC]
+fix: WB breakeven uses 50% of TP distance instead of ATR-based trigger
+Files: core/paper_trader.py
