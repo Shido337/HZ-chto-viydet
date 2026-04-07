@@ -88,13 +88,17 @@ class PaperTrader:
         tp = signal.tp_price + shift
 
         # Global SL cap: tighten SL if risk > GLOBAL_MAX_SL_PCT of entry
+        # When SL is capped, recalculate TP to maintain the strategy's intended RR
         max_sl_dist = entry * GLOBAL_MAX_SL_PCT
         sl_dist = abs(entry - sl)
         if sl_dist > max_sl_dist:
+            original_rr = abs(tp - entry) / sl_dist if sl_dist > 0 else 1.5
             if signal.direction == Direction.LONG:
                 sl = entry - max_sl_dist
+                tp = entry + max_sl_dist * original_rr
             else:
                 sl = entry + max_sl_dist
+                tp = entry - max_sl_dist * original_rr
 
         notional = size_usdt
         margin = notional / LEVERAGE
