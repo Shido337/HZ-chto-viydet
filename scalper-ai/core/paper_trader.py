@@ -339,7 +339,7 @@ class PaperTrader:
         """
         from data.indicators import wall_absorption_pct as _abs_pct
         ENTRY_GAP = 0.0002  # mirrors BOUNCE_ENTRY_GAP
-        FLIP_THRESHOLD = 0.30  # 30% absorbed = thesis broken
+        FLIP_THRESHOLD = 0.50  # 50% absorbed = thesis broken (mirrors ABSORPTION_PCT in wall_bounce.py)
 
         if pos.direction == Direction.LONG:
             wall_price = pos.entry_price / (1 + ENTRY_GAP)
