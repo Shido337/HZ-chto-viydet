@@ -264,6 +264,9 @@ class PaperTrader:
             pos = self.positions[symbol]
             ap = snap.adaptive
             self._update_price_tracking(pos, snap.price)
+            # WB wall-gone guard: if the wall disappeared, tighten SL to just past the wall level
+            if pos.setup_type == SetupType.WALL_BOUNCE:
+                self._check_wb_wall_gone(pos, snap)
             self._check_breakeven(pos, snap.price, ap)
             self._check_trailing(pos, snap.price, ap)
             exit_result = self._check_exits(pos, snap)
@@ -283,6 +286,45 @@ class PaperTrader:
         else:
             pos.best_price = min(pos.best_price, price) if pos.best_price else price
         pos.current_pnl = PaperTrader._calc_pnl(pos, price)
+
+    @staticmethod
+    def _check_wb_wall_gone(pos: Position, snap: "MarketSnapshot") -> None:
+        """If WB wall disappeared, tighten SL to just past the wall level."""
+        ENTRY_GAP = 0.0002  # mirrors BOUNCE_ENTRY_GAP from wall_bounce
+        TICK_BUFFER = 0.0003  # SL placed 0.03% beyond the wall level
+        # Recover approximate wall price from entry
+        if pos.direction == Direction.LONG:
+            wall_price = pos.entry_price / (1 + ENTRY_GAP)
+            side = "bid"
+        else:
+            wall_price = pos.entry_price / (1 - ENTRY_GAP)
+            side = "ask"
+        # Check if wall still exists near the original level
+        book = snap.depth_bids if side == "bid" else snap.depth_asks
+        wall = find_wall(book, mid_price=snap.price)
+        wall_alive = False
+        if wall:
+            wp, _ = wall
+            if abs(wp - wall_price) / wall_price < 0.003:  # within 0.3% of original wall
+                wall_alive = True
+        if wall_alive:
+            return
+        # Wall is gone — tighten SL to just past the wall level
+        if pos.direction == Direction.LONG:
+            new_sl = wall_price * (1 - TICK_BUFFER)
+            # Only tighten, never widen (BE or trailing may have moved SL closer)
+            if new_sl <= pos.sl_price:
+                return
+            pos.sl_price = new_sl
+        else:
+            new_sl = wall_price * (1 + TICK_BUFFER)
+            if new_sl >= pos.sl_price:
+                return
+            pos.sl_price = new_sl
+        logger.warning(
+            "[PAPER] WB wall gone — SL tightened to {:.6f} for {} (wall was ~{:.6f})",
+            new_sl, pos.symbol, wall_price,
+        )
 
     @staticmethod
     def _check_breakeven(pos: Position, price: float, ap: AdaptiveParams) -> None:

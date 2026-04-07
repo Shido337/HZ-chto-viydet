@@ -165,3 +165,7 @@ Files: strategies/early_momentum.py
 ## [2026-04-07 09:49 UTC]
 feat: cancel WB pending limit when wall disappears — no more trading without thesis
 Files: core/paper_trader.py
+
+## [2026-04-07 09:53 UTC]
+feat: WB wall-gone SL tightens to wall edge — thesis dead = immediate exit
+Files: core/paper_trader.py
