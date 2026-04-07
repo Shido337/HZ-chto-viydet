@@ -177,3 +177,7 @@ Files: strategies/early_momentum.py, core/bot_engine.py
 ## [2026-04-07 09:58 UTC]
 fix: WB bounce SL strictly behind wall (0.08%), not ATR-widened — wall-gone tighten only for absorption
 Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py
+
+## [2026-04-07 10:10 UTC]
+fix: WB min wall $50K USD filter — skip noise walls, add USD to diagnostics
+Files: strategies/wall_bounce.py, core/bot_engine.py

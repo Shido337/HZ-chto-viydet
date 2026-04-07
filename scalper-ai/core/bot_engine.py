@@ -478,13 +478,15 @@ class BotEngine:
                     dist_b = (snap.price - bwp) / bwp * 100 if bwp else 0.0
                     abs_b = wall_absorption_pct(snap.wall_history, bwp, "bid") * 100
                     spoof_b = wall_is_spoof(snap.wall_history, bwp, "bid")
-                    parts.append(f"bid={bwp:.4f} qty={bwq:.0f} dist={dist_b:.2f}% abs={abs_b:.0f}% spoof={spoof_b}")
+                    usd_b = bwp * bwq
+                    parts.append(f"bid={bwp:.4f} qty={bwq:.0f} ${usd_b:.0f} dist={dist_b:.2f}% abs={abs_b:.0f}% spoof={spoof_b}")
                 if ask_wall:
                     awp, awq = ask_wall
                     dist_a = (awp - snap.price) / snap.price * 100 if snap.price else 0.0
                     abs_a = wall_absorption_pct(snap.wall_history, awp, "ask") * 100
                     spoof_a = wall_is_spoof(snap.wall_history, awp, "ask")
-                    parts.append(f"ask={awp:.4f} qty={awq:.0f} dist={dist_a:.2f}% abs={abs_a:.0f}% spoof={spoof_a}")
+                    usd_a = awp * awq
+                    parts.append(f"ask={awp:.4f} qty={awq:.0f} ${usd_a:.0f} dist={dist_a:.2f}% abs={abs_a:.0f}% spoof={spoof_a}")
                 logger.info(f"[DIAG] {symbol} WB: {' | '.join(parts)} cvd={snap.cvd_delta_1m:.0f}")
             else:
                 logger.info(f"[DIAG] {symbol} WB: depth_bids={len(snap.depth_bids)} asks={len(snap.depth_asks)} (no wall)")
