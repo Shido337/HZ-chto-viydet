@@ -185,3 +185,7 @@ Files: strategies/wall_bounce.py, core/bot_engine.py
 ## [2026-04-07 10:21 UTC]
 tune: WB MIN_WALL_USD 50K -> 20K — less restrictive while still filtering noise
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 10:25 UTC]
+perf: disable CB (-12.5%), raise score 0.55->0.65, stale 0.5%->0.3% @ 2min, hold EM/WB 4->3min
+Files: core/bot_engine.py, core/paper_trader.py

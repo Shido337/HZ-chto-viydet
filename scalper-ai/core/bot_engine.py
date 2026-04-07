@@ -52,7 +52,7 @@ class BotEngine:
             WallBounce(),
         ]
         self.strategy_enabled = {
-            "CONTINUATION_BREAK": True,   # re-enabled: SL cap 0.8%, ADX≤40, rejection candle filter
+            "CONTINUATION_BREAK": False,  # disabled: 2 TP / 61 trades, -12.5% total
             "MEAN_REVERSION": True,
             "EARLY_MOMENTUM": True,
             "WALL_BOUNCE": True,
@@ -668,7 +668,7 @@ class BotEngine:
             vol_spike_min = 0.9
 
         # --- Learner feedback into min_score ---
-        base_score = 0.55
+        base_score = 0.65
         # Check enabled setup types and use the most conservative (tightest) adjustment
         adjustments: list[float] = []
         for setup_name, enabled in self.strategy_enabled.items():
@@ -679,7 +679,7 @@ class BotEngine:
                 adjustments.append(adj)
         # Use max (most conservative) — if any strategy is losing, tighten for all
         score_delta = max(adjustments) if adjustments else 0.0
-        min_score = max(0.50, min(0.80, base_score + score_delta))
+        min_score = max(0.60, min(0.85, base_score + score_delta))
 
         # --- Entry filters (ATR-percentile driven) ---
         # atr_pct 0 = dead quiet, 100 = extreme volatility
