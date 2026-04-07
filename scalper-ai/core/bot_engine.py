@@ -255,6 +255,9 @@ class BotEngine:
             snap = self.cache.get_snapshot(symbol)
             if snap.stale or not snap.price:
                 continue
+            # Skip if CVD data hasn't populated yet (warm-up period)
+            if snap.cvd_delta_20s == 0 and snap.cvd_delta_1m == 0:
+                continue
             if symbol in self.trader.positions:
                 continue
             # Skip symbols with pending limit orders

@@ -125,3 +125,7 @@ Files: strategies/early_momentum.py
 ## [2026-04-07 04:26 UTC]
 tune: two-stage trailing - wider trail after 1x ATR profit for big runners
 Files: core/paper_trader.py
+
+## [2026-04-07 04:57 UTC]
+fix: revert two-stage trail, add CVD warm-up guard, prevent trading with zero CVD
+Files: core/paper_trader.py, core/bot_engine.py
