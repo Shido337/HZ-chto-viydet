@@ -7,6 +7,7 @@ from loguru import logger
 
 from core.signal_generator import Direction, PendingOrder, Position, SetupType, Signal
 from data.cache import AdaptiveParams, MarketCache
+from data.indicators import find_wall, wall_stable
 
 if TYPE_CHECKING:
     from data.cache import MarketSnapshot
@@ -211,6 +212,27 @@ class PaperTrader:
                     f"[PAPER] Limit EXPIRED {symbol} "
                     f"@ {order.entry_price:.6f} (not filled in {int(now - order.signal.timestamp)}s)",
                 )
+            elif order.setup_type == SetupType.WALL_BOUNCE:
+                # Wall-gone guard: cancel WB limit if the wall we bounced off disappeared
+                side = "bid" if order.direction == Direction.LONG else "ask"
+                wall = find_wall(
+                    snap.depth_bids if side == "bid" else snap.depth_asks,
+                    mid_price=snap.price,
+                )
+                wall_still_there = False
+                if wall:
+                    wp, _ = wall
+                    # Wall must be near our entry (within 1.5%) and still stable
+                    wall_dist = abs(wp - order.entry_price) / order.entry_price if order.entry_price else 1.0
+                    if wall_dist < 0.015 and wall_stable(snap.wall_history, wp, side, 3.0):
+                        wall_still_there = True
+                if not wall_still_there:
+                    del self.pending[symbol]
+                    expired.append(order)
+                    logger.info(
+                        f"[PAPER] Limit CANCELLED {symbol} — wall gone "
+                        f"(was {order.direction.value} @ {order.entry_price:.6f})",
+                    )
 
         return filled, expired
 
