@@ -117,3 +117,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 02:56 UTC]
 fix: 120s loss cooldown to prevent consecutive SL hit streaks on same symbol
 Files: core/bot_engine.py
+
+## [2026-04-07 03:34 UTC]
+tune: CVD impulse 00 USD floor for EM-TREND to filter weak momentum
+Files: strategies/early_momentum.py

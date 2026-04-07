@@ -19,7 +19,8 @@ MIN_RR = 0.5                  # minimum 0.5:1 — trailing compensates
 TREND_EMA_BARS = 20           # 5m EMA for trend alignment
 # Trending momentum (high ADX impulse entry — no ATR compression required)
 TRENDING_OB_MIN = 0.50        # loose OB threshold in strong trend
-TRENDING_CVD_20S_MIN = 50.0   # minimum |cvd_delta_20s| for impulse confirmation
+TRENDING_CVD_20S_MIN = 50.0    # minimum |cvd_delta_20s| units for impulse (fallback)
+TRENDING_CVD_USD_MIN = 500.0   # minimum CVD × price in $ for meaningful impulse
 # Adaptive entry constants come from snap.adaptive:
 #   em_adx_low, em_adx_high, em_atr_compression_pct, em_cvd_bars,
 #   ob_min, min_score, tp_rr, max_sl_atr, min_sl_atr, atr_value
@@ -85,7 +86,10 @@ class EarlyMomentum(BaseStrategy):
             direction = Direction.SHORT
         else:
             return None
-        # Short-term CVD impulse must confirm real momentum
+        # Short-term CVD impulse must confirm real momentum (in $ terms)
+        cvd_usd = abs(snap.cvd_delta_20s * snap.price)
+        if cvd_usd < TRENDING_CVD_USD_MIN:
+            return None
         if direction == Direction.LONG and snap.cvd_delta_20s < TRENDING_CVD_20S_MIN:
             return None
         if direction == Direction.SHORT and snap.cvd_delta_20s > -TRENDING_CVD_20S_MIN:
