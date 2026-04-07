@@ -65,3 +65,7 @@ Files: data/indicators.py, data/cache.py
 ## [2026-04-07 00:17 UTC]
 fix: reset signal cooldown on position close and pending expiry
 Files: core/bot_engine.py
+
+## [2026-04-07 00:26 UTC]
+em: add trending impulse path (high ADX, no ATR compression required)
+Files: strategies/early_momentum.py, core/bot_engine.py

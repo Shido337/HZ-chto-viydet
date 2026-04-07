@@ -366,7 +366,7 @@ class BotEngine:
                             reason += f"{brk_dir} brk={brk_lvl:.5f} RETEST dist={dist*100:.2f}% → cvd={snap.cvd_delta_1m:.0f} ob={ob:.2f}"
                 logger.info(f"[DIAG] {symbol} {reason}")
 
-            # EarlyMomentum diagnosis (adaptive ADX window)
+            # EarlyMomentum diagnosis (adaptive ADX window + trending impulse path)
             ap = snap.adaptive
             if ap.em_adx_low <= adx_val <= ap.em_adx_high:
                 candles_5m = list(snap.klines_5m)
@@ -395,6 +395,30 @@ class BotEngine:
                             level = detect_swing_high(candles_5m, 10) if all_up else detect_swing_low(candles_5m, 10)
                             prox = abs(snap.price - level) / level if level else 999
                             reason += f"{d} ob={ob:.2f} lvl={level:.6f} prox={prox*100:.2f}%"
+                logger.info(f"[DIAG] {symbol} {reason}")
+            elif adx_val > ap.em_adx_high and regime in (
+                MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
+            ):
+                candles_1m = list(snap.klines_1m)
+                reason = "EM-TREND: "
+                if len(candles_1m) < 6:
+                    reason += "need 6+ 1m candles"
+                else:
+                    n = 3
+                    closed = candles_1m[-(n + 1):-1]
+                    all_up = all(c["c"] > c["o"] for c in closed)
+                    all_dn = all(c["c"] < c["o"] for c in closed)
+                    expected_bull = regime == MarketRegime.TRENDING_BULL
+                    if not all_up and not all_dn:
+                        reason += f"cvd_bars=flat"
+                    elif (expected_bull and not all_up) or (not expected_bull and not all_dn):
+                        reason += f"dir vs regime mismatch bull={expected_bull} up={all_up}"
+                    else:
+                        d_str = "LONG" if all_up else "SHORT"
+                        reason += (
+                            f"{d_str} cvd20s={snap.cvd_delta_20s:.0f} "
+                            f"ob={ob:.2f} adx={adx_val:.1f}"
+                        )
                 logger.info(f"[DIAG] {symbol} {reason}")
 
             # MeanReversion diagnosis (RANGING / LOW_VOL / HIGH_VOL)

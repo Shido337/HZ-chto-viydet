@@ -18,6 +18,9 @@ CVD_BUILDUP_BARS = 3          # min consecutive 1m bars with accumulating CVD (s
 OB_CONSISTENT_MIN = 0.65      # OB must be ≥65% consistent — per OFCS spec
 MIN_RR = 0.5                  # minimum 0.5:1 — trailing compensates
 TREND_EMA_BARS = 20           # 5m EMA for trend alignment
+# Trending momentum (high ADX impulse entry — no ATR compression required)
+TRENDING_OB_MIN = 0.55        # looser OB threshold in strong trend
+TRENDING_CVD_20S_MIN = 500.0  # minimum |cvd_delta_20s| for impulse confirmation
 # Adaptive entry constants come from snap.adaptive:
 #   em_adx_low, em_adx_high, em_atr_compression_pct, em_cvd_bars,
 #   ob_min, min_score, tp_rr, max_sl_atr, min_sl_atr, atr_value
@@ -33,18 +36,37 @@ class EarlyMomentum(BaseStrategy):
             return None
         ap = snap.adaptive
         adx_val = snap.indicators.adx
-        if not (ap.em_adx_low <= adx_val <= ap.em_adx_high):
-            return None
-        if not self._check_atr_compression(snap):
-            return None
-        direction = self._check_cvd_buildup(snap)
-        if direction is None:
-            return None
-        if not self._check_trend_alignment(snap, direction):
-            return None
-        if not self._check_ob_and_level(snap, direction):
-            return None
-        return self._build_signal(snap, direction, ml_boost)
+
+        # Path 1: TRANSITIONING regime (ADX 20-25) — coiling + ATR compression
+        if ap.em_adx_low <= adx_val <= ap.em_adx_high:
+            if not self._check_atr_compression(snap):
+                return None
+            direction = self._check_cvd_buildup(snap)
+            if direction is None:
+                return None
+            if not self._check_trend_alignment(snap, direction):
+                return None
+            if not self._check_ob_and_level(snap, direction):
+                return None
+            return self._build_signal(snap, direction, ml_boost)
+
+        # Path 2: TRENDING regime (ADX > em_adx_high) — impulse momentum, no ATR compression
+        if adx_val > ap.em_adx_high and snap.regime in (
+            MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
+        ):
+            direction = self._check_trending_impulse(snap)
+            if direction is None:
+                return None
+            if not self._check_trend_alignment(snap, direction):
+                return None
+            ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
+            if direction == Direction.LONG and ob < TRENDING_OB_MIN:
+                return None
+            if direction == Direction.SHORT and ob > (1 - TRENDING_OB_MIN):
+                return None
+            return self._build_signal(snap, direction, ml_boost)
+
+        return None
 
     # -- sub-checks ---------------------------------------------------------
 
@@ -54,6 +76,23 @@ class EarlyMomentum(BaseStrategy):
             return False
         pct = calc_atr_pct(candles_5m, 14, 576)
         return pct < snap.adaptive.em_atr_compression_pct
+
+    def _check_trending_impulse(self, snap: MarketSnapshot) -> Direction | None:
+        """Trending regime impulse: CVD buildup + 20s delta confirms direction matches regime."""
+        direction = self._check_cvd_buildup(snap)
+        if direction is None:
+            return None
+        # Direction must align with macro regime
+        if snap.regime == MarketRegime.TRENDING_BULL and direction != Direction.LONG:
+            return None
+        if snap.regime == MarketRegime.TRENDING_BEAR and direction != Direction.SHORT:
+            return None
+        # Short-term CVD impulse must confirm (real momentum, not just 3 doji candles)
+        if direction == Direction.LONG and snap.cvd_delta_20s < TRENDING_CVD_20S_MIN:
+            return None
+        if direction == Direction.SHORT and snap.cvd_delta_20s > -TRENDING_CVD_20S_MIN:
+            return None
+        return direction
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:
         """Detect CVD accumulation: 3+ consecutive 1m bars with net delta in same direction.
