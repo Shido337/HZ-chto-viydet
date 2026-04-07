@@ -112,6 +112,11 @@ class EarlyMomentum(BaseStrategy):
             return None
         if direction == Direction.SHORT and snap.cvd_delta_20s > -TRENDING_CVD_20S_MIN:
             return None
+        # 1m CVD must not oppose direction — a 20s spike can't override 1m selling pressure
+        if direction == Direction.LONG and snap.cvd_delta_1m < 0:
+            return None
+        if direction == Direction.SHORT and snap.cvd_delta_1m > 0:
+            return None
         # Short-term price momentum: last TWO 1m candles must close in our direction
         candles_1m = list(snap.klines_1m)
         if len(candles_1m) >= 3:
@@ -139,10 +144,9 @@ class EarlyMomentum(BaseStrategy):
         return direction
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:
-        """Detect CVD accumulation via majority of recent 1m bars.
+        """Detect CVD accumulation: majority of recent 1m candles + 1m CVD sign confirmation.
 
-        Uses adaptive em_cvd_bars (2 or 3). Requires majority same direction
-        (2/2 or 2/3) — allows one counter-candle in choppy momentum.
+        Candle body direction alone is noise. Require real CVD to agree with candle direction.
         """
         n_bars = snap.adaptive.em_cvd_bars
         candles_1m = list(snap.klines_1m)
@@ -155,8 +159,14 @@ class EarlyMomentum(BaseStrategy):
         min_required = (n_bars // 2) + 1  # majority: 2/3 or 2/2
 
         if bullish >= min_required:
+            # Validate with real CVD: must have actual buying pressure, not just green wicks
+            if snap.cvd_delta_1m <= 0:
+                return None
             return Direction.LONG
         if bearish >= min_required:
+            # Validate with real CVD: must have actual selling pressure
+            if snap.cvd_delta_1m >= 0:
+                return None
             return Direction.SHORT
         return None
 

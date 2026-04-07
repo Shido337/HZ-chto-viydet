@@ -291,3 +291,7 @@ Files: core/paper_trader.py, core/bot_engine.py
 ## [2026-04-07 13:27 UTC]
 fix: wall_absorbed reversal signal + cooldown math + Signal.timestamp->PendingOrder.created_at
 Files: core/bot_engine.py, core/paper_trader.py
+
+## [2026-04-07 14:10 UTC]
+fix: EM cvd_buildup validates real CVD sign; trending path blocks opposite 1m CVD
+Files: strategies/early_momentum.py
