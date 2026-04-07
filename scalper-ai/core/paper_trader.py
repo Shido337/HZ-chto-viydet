@@ -195,7 +195,7 @@ class PaperTrader:
                 expired.append(order)
                 logger.info(
                     f"[PAPER] Limit EXPIRED {symbol} "
-                    f"@ {order.entry_price:.6f} (not filled in {PENDING_TIMEOUT}s)",
+                    f"@ {order.entry_price:.6f} (not filled in {int(now - order.signal.timestamp)}s)",
                 )
 
         return filled, expired

@@ -608,17 +608,17 @@ class BotEngine:
 
         # --- Trailing distances (ATR-relative) ---
         if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
-            trail_activation = 0.3   # activate early in trends
-            trail_distance = 0.2     # tight trail to lock profits fast
-            be_trigger = 0.25
+            trail_activation = 0.5   # activate after meaningful move in trends
+            trail_distance = 0.4     # wider trail to let winners run
+            be_trigger = 0.35
         elif regime == MarketRegime.HIGH_VOL:
             trail_activation = 0.6   # moderate in high vol
             trail_distance = 0.4     # wider trail for noise
             be_trigger = 0.5
         else:  # RANGING / LOW_VOL
-            trail_activation = 0.4
-            trail_distance = 0.25
-            be_trigger = 0.35
+            trail_activation = 0.5
+            trail_distance = 0.35
+            be_trigger = 0.40
 
         # --- OB & volume thresholds adjusted by ATR percentile ---
         # Low ATR percentile = quiet market → relax filters to find trades

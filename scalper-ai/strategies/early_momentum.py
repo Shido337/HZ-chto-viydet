@@ -188,7 +188,9 @@ class EarlyMomentum(BaseStrategy):
         if score < ap.min_score:
             return None
 
-        recent_5m = candles_5m[-10:]
+        # Trending: use 3 candles (15min) for tighter structure; transitioning: 10
+        look = 3 if is_trending else 10
+        recent_5m = candles_5m[-look:]
         comp_high = max(c["h"] for c in recent_5m)
         comp_low = min(c["l"] for c in recent_5m)
 
@@ -197,8 +199,10 @@ class EarlyMomentum(BaseStrategy):
             return None
 
         entry = snap.price
-        max_sl_dist = atr_val * ap.max_sl_atr
+        max_sl_dist = atr_val * (1.0 if is_trending else ap.max_sl_atr)
         min_sl_dist = atr_val * ap.min_sl_atr
+        # Hard cap: SL can't exceed 1.5% of entry price for any EM trade
+        hard_cap = entry * 0.015
         if d == Direction.LONG:
             raw_risk = entry - comp_low
         else:
@@ -208,6 +212,7 @@ class EarlyMomentum(BaseStrategy):
             return None
 
         risk = max(raw_risk, min_sl_dist)
+        risk = min(risk, hard_cap)  # never exceed 1.5% of price
         if risk <= 0 or (raw_risk > 0 and risk > raw_risk * 3):
             return None
         if d == Direction.LONG:
