@@ -20,7 +20,8 @@ TREND_EMA_BARS = 20           # 5m EMA for trend alignment
 # Trending momentum (high ADX impulse entry — no ATR compression required)
 TRENDING_OB_MIN = 0.50        # loose OB threshold in strong trend
 TRENDING_CVD_20S_MIN = 50.0    # minimum |cvd_delta_20s| units for impulse (fallback)
-TRENDING_CVD_USD_MIN = 500.0   # minimum CVD × price in $ for meaningful impulse
+TRENDING_CVD_USD_MIN = 2000.0  # minimum CVD × price in $ for meaningful impulse
+TRENDING_ADX_MIN = 35.0        # require strong trend (ADX > 35) for trending path
 # Adaptive entry constants come from snap.adaptive:
 #   em_adx_low, em_adx_high, em_atr_compression_pct, em_cvd_bars,
 #   ob_min, min_score, tp_rr, max_sl_atr, min_sl_atr, atr_value
@@ -50,9 +51,9 @@ class EarlyMomentum(BaseStrategy):
                 return None
             return self._build_signal(snap, direction, ml_boost)
 
-        # Path 2: TRENDING regime (ADX > em_adx_high) — impulse momentum
-        # Regime direction + CVD 20s + soft OB guard (OB shouldn't be strongly against us)
-        if adx_val > ap.em_adx_high and snap.regime in (
+        # Path 2: TRENDING regime (ADX > TRENDING_ADX_MIN) — impulse momentum
+        # Regime direction + CVD 20s + OB guard + strong trend requirement
+        if adx_val > TRENDING_ADX_MIN and snap.regime in (
             MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
         ):
             direction = self._check_trending_impulse(snap)
@@ -94,15 +95,17 @@ class EarlyMomentum(BaseStrategy):
             return None
         if direction == Direction.SHORT and snap.cvd_delta_20s > -TRENDING_CVD_20S_MIN:
             return None
-        # Short-term price momentum: price must be moving in our direction
-        # (current price vs last 1m candle open confirms impulse, not just CVD spike)
+        # Short-term price momentum: last TWO 1m candles must close in our direction
         candles_1m = list(snap.klines_1m)
-        if len(candles_1m) >= 2:
-            last_open = candles_1m[-1]["o"]
-            if direction == Direction.LONG and snap.price < last_open:
-                return None  # price falling — don't enter LONG
-            if direction == Direction.SHORT and snap.price > last_open:
-                return None  # price rising — don't enter SHORT
+        if len(candles_1m) >= 3:
+            c1 = candles_1m[-2]  # second-to-last closed candle
+            c2 = candles_1m[-3]  # third-to-last closed candle
+            if direction == Direction.LONG:
+                if not (c1["c"] > c1["o"] and c2["c"] > c2["o"]):
+                    return None  # need 2 bullish candles
+            else:
+                if not (c1["c"] < c1["o"] and c2["c"] < c2["o"]):
+                    return None  # need 2 bearish candles
         return direction
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:

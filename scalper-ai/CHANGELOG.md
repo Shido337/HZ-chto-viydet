@@ -129,3 +129,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 04:57 UTC]
 fix: revert two-stage trail, add CVD warm-up guard, prevent trading with zero CVD
 Files: core/paper_trader.py, core/bot_engine.py
+
+## [2026-04-07 06:33 UTC]
+tune: EM-TREND stricter filters — ADX>35, CVD USD>2000, 2-candle momentum
+Files: strategies/early_momentum.py
