@@ -53,3 +53,7 @@ Files: core/coin_screener.py
 ## [2026-04-06 23:53 UTC]
 fix: session reset on restart + signals expire after execution
 Files: dashboard/src/hooks/useWebSocket.ts, core/bot_engine.py, server/api.py
+
+## [2026-04-07 00:01 UTC]
+wb: limit orders for bounce+absorption; absorption entry at wall level
+Files: strategies/wall_bounce.py, core/paper_trader.py

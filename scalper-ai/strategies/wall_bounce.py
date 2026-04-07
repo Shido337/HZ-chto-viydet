@@ -101,7 +101,7 @@ class WallBounce(BaseStrategy):
                 # round_number NOT required — a 40%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s >= MIN_CVD_BUILD:
-                    entry = snap.ask
+                    entry = wp  # limit AT wall level — fills when price breaks through it
                     atr = ap.atr_value
                     raw_sl = entry - max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 - 0.003)
                     sl = max(raw_sl, entry * (1 - MAX_SL_PCT))
@@ -126,7 +126,7 @@ class WallBounce(BaseStrategy):
                 # round_number NOT required — a 55%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s <= -MIN_CVD_BUILD:
-                    entry = snap.bid
+                    entry = wp  # limit AT wall level — fills when price breaks through it
                     atr = ap.atr_value
                     raw_sl = entry + max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 + 0.003)
                     sl = min(raw_sl, entry * (1 + MAX_SL_PCT))
