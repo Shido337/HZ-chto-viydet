@@ -339,22 +339,30 @@ class BotEngine:
         if not wall_p:
             return None
 
+        from data.indicators import wall_is_spoof, wall_absorption_pct
+
         if pos.direction == Direction.SHORT:
             # Was SHORT from ASK wall → ASK wall absorbed by buyers → go LONG
-            # CVD must confirm buyers are actually pressing through
-            if snap.cvd_delta_20s <= 0:
-                return None
+            side = "ask"
+            if wall_is_spoof(snap.wall_history, wall_p, side):
+                return None  # wall pulled without being eaten → spoof, skip
+            abs_pct = wall_absorption_pct(snap.wall_history, wall_p, side, min_hist=5)
+            if abs_pct < 0.15:
+                return None  # wall just removed, not absorbed → skip
             d = Direction.LONG
-            entry = snap.price  # price at/above wall now
+            entry = snap.price
             sl = max(wall_p * (1 - max(atr * 1.2 / wall_p, 0.003)), entry * 0.990)
             if sl >= entry:
                 return None
             tp = entry + (entry - sl) * 2.0
         else:
             # Was LONG from BID wall → BID wall absorbed by sellers → go SHORT
-            # CVD must confirm sellers are actually pressing through
-            if snap.cvd_delta_20s >= 0:
-                return None
+            side = "bid"
+            if wall_is_spoof(snap.wall_history, wall_p, side):
+                return None  # wall pulled without being eaten → spoof, skip
+            abs_pct = wall_absorption_pct(snap.wall_history, wall_p, side, min_hist=5)
+            if abs_pct < 0.15:
+                return None  # wall just removed, not absorbed → skip
             d = Direction.SHORT
             entry = snap.price
             sl = min(wall_p * (1 + max(atr * 1.2 / wall_p, 0.003)), entry * 1.010)
