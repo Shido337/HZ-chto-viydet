@@ -289,14 +289,18 @@ class MarketCache:
             lo = mid_price * (1.0 - max_dist_pct)
             hi = mid_price * (1.0 + max_dist_pct)
             levels = [(p, q) for p, q in levels if lo <= p <= hi]
-        # Aggregate adjacent ticks into stable log-scale buckets before scoring
-        levels = bucket_levels(levels, BUCKET_PCT)
-        if len(levels) < 3:
+        # Median-based wall detection (same logic as find_wall in indicators.py)
+        raw = [(p, q) for p, q in levels if q > 0]
+        if len(raw) < 3:
             return 0.0, 0.0
-        qtys = [q for _, q in levels if q > 0]
-        if not qtys:
+        sorted_qtys = sorted(q for _, q in raw)
+        median_qty = sorted_qtys[len(sorted_qtys) // 2]
+        if median_qty <= 0:
             return 0.0, 0.0
-        avg = sum(qtys) / len(qtys)
+        avg = median_qty  # reuse variable name; threshold = avg * mult = median * mult
+        levels = bucket_levels([lv for lv in raw if lv[1] >= avg * mult], BUCKET_PCT)
+        if not levels:
+            return 0.0, 0.0
         best_p, best_q = 0.0, 0.0
         for p, q in levels:
             if q >= avg * mult and q > best_q:

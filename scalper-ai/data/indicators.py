@@ -261,30 +261,36 @@ def find_wall(
 ) -> tuple[float, float] | None:
     """Detect dominant order wall in a sequence of (price, qty) depth levels.
 
-    Only considers levels within *max_dist_pct* of *mid_price* (default 5%).
-    Levels are first aggregated into *bucket_pct*-wide price bins so that
-    clusters spread across adjacent ticks are visible as a single wall.
-    Returns (wall_price, wall_qty) for the largest bucket that is ≥multiplier×avg,
-    or None if no such level exists.
+    Uses median-based threshold on raw ticks so a concentrated wall level
+    (e.g. 369K vs ~15K neighbours) is not diluted by bucketing.
+    Algorithm:
+      1. Filter ticks to price window.
+      2. Compute median tick qty as robust baseline.
+      3. Keep only ticks where qty >= median * multiplier.
+      4. Aggregate adjacent wall ticks into log-scale buckets.
+      5. Return the heaviest bucket.
     """
     if mid_price > 0:
         lo = mid_price * (1.0 - max_dist_pct)
         hi = mid_price * (1.0 + max_dist_pct)
         levels = [(p, q) for p, q in levels if lo <= p <= hi]
-    # Aggregate nearby ticks into stable log-scale buckets before computing avg
-    levels = bucket_levels(list(levels), bucket_pct)
-    if len(levels) < 3:
+    raw = [(p, q) for p, q in levels if q > 0]
+    if len(raw) < 3:
         return None
-    qtys = [q for _, q in levels if q > 0]
-    if not qtys:
+    sorted_qtys = sorted(q for _, q in raw)
+    median_qty = sorted_qtys[len(sorted_qtys) // 2]
+    if median_qty <= 0:
         return None
-    avg = sum(qtys) / len(qtys)
-    best: tuple[float, float] | None = None
-    for price, qty in levels:
-        if qty >= avg * multiplier:
-            if best is None or qty > best[1]:
-                best = (price, qty)
-    return best
+    threshold = median_qty * multiplier
+    # Keep only dominant ticks (potential wall ticks)
+    wall_ticks = [(p, q) for p, q in raw if q >= threshold]
+    if not wall_ticks:
+        return None
+    # Aggregate nearby wall ticks into buckets (wall spread across 2-3 adjacent ticks)
+    aggregated = bucket_levels(wall_ticks, bucket_pct)
+    if not aggregated:
+        return None
+    return max(aggregated, key=lambda x: x[1])
 
 
 def wall_absorption_pct(

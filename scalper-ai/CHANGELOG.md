@@ -57,3 +57,7 @@ Files: dashboard/src/hooks/useWebSocket.ts, core/bot_engine.py, server/api.py
 ## [2026-04-07 00:01 UTC]
 wb: limit orders for bounce+absorption; absorption entry at wall level
 Files: strategies/wall_bounce.py, core/paper_trader.py
+
+## [2026-04-07 00:11 UTC]
+fix: wall detection uses median-based threshold (not bucketed avg)
+Files: data/indicators.py, data/cache.py
