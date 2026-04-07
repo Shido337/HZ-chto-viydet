@@ -141,3 +141,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 07:25 UTC]
 fix: progressive cooldown — 2min/5min/10min after 1/2/3 consecutive losses per coin
 Files: core/bot_engine.py
+
+## [2026-04-07 07:44 UTC]
+tune: WB bounce 1:1 TP ratio + disable EM-TREND (too many losers)
+Files: strategies/wall_bounce.py, strategies/early_momentum.py

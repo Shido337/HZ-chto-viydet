@@ -48,7 +48,7 @@ VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
-MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
+MIN_RR: float           = 1.0     # minimum reward-to-risk ratio
 
 
 class WallBounce(BaseStrategy):
@@ -174,7 +174,7 @@ class WallBounce(BaseStrategy):
                     sl_dist = (entry - sl) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None
-                    tp = entry + (entry - sl) * ap.tp_rr
+                    tp = entry + (entry - sl) * 1.0  # 1:1 RR — capture quick bounce
                     return self._build(
                         snap, Direction.LONG, entry, sl, tp,
                         ob, 0.0, "bounce", ap, ml_boost, wq,
@@ -196,7 +196,7 @@ class WallBounce(BaseStrategy):
                     sl_dist = (sl - entry) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None
-                    tp = entry - (sl - entry) * ap.tp_rr
+                    tp = entry - (sl - entry) * 1.0  # 1:1 RR — capture quick bounce
                     return self._build(
                         snap, Direction.SHORT, entry, sl, tp,
                         ob, 0.0, "bounce", ap, ml_boost, wq,
