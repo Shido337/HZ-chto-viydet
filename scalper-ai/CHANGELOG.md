@@ -303,3 +303,7 @@ Files: strategies/wall_bounce.py, core/paper_trader.py
 ## [2026-04-07 14:30 UTC]
 tune: bounce BOUNCE_DIST_PCT 1.2%->0.5% — tighter entry near wall, smaller SL
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 14:33 UTC]
+feat: bounce CVD-based market/limit split — going away=market, toward wall=limit
+Files: strategies/wall_bounce.py, core/paper_trader.py, core/bot_engine.py

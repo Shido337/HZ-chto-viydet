@@ -180,9 +180,13 @@ class WallBounce(BaseStrategy):
                 if (wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "bid")
                         and touches >= BOUNCE_MIN_TOUCHES):
-                    # Market entry at current price — we're already near the wall.
-                    # Limit entry caused trades to never fill when price trended away.
-                    entry = snap.price
+                    # If CVD is positive (buyers pushing price UP, away from wall) → market entry now.
+                    # Otherwise → limit just above wall, wait for price to touch.
+                    going_away = snap.cvd_delta_20s > 0
+                    if going_away:
+                        entry = snap.price
+                    else:
+                        entry = wp * (1 + BOUNCE_ENTRY_GAP)
                     sl = wp * (1 - SL_BUFFER_PCT)
                     sl_dist = (entry - sl) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
@@ -190,7 +194,7 @@ class WallBounce(BaseStrategy):
                     tp = entry + (entry - sl) * ap.tp_rr
                     return self._build_bounce(
                         snap, Direction.LONG, entry, sl, tp,
-                        wp, dist, touches, ap, ml_boost,
+                        wp, dist, touches, ap, ml_boost, going_away,
                     )
 
         # SHORT: large ask wall above, price approaching from below → limit entry below wall
@@ -208,8 +212,13 @@ class WallBounce(BaseStrategy):
                 if (wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "ask")
                         and touches >= BOUNCE_MIN_TOUCHES):
-                    # Market entry at current price — we're already near the wall.
-                    entry = snap.price
+                    # If CVD is negative (sellers pushing price DOWN, away from wall) → market entry now.
+                    # Otherwise → limit just below wall, wait for price to touch.
+                    going_away = snap.cvd_delta_20s < 0
+                    if going_away:
+                        entry = snap.price
+                    else:
+                        entry = wp * (1 - BOUNCE_ENTRY_GAP)
                     sl = wp * (1 + SL_BUFFER_PCT)
                     sl_dist = (sl - entry) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
@@ -217,7 +226,7 @@ class WallBounce(BaseStrategy):
                     tp = entry - (sl - entry) * ap.tp_rr
                     return self._build_bounce(
                         snap, Direction.SHORT, entry, sl, tp,
-                        wp, dist, touches, ap, ml_boost,
+                        wp, dist, touches, ap, ml_boost, going_away,
                     )
 
         return None
@@ -238,6 +247,7 @@ class WallBounce(BaseStrategy):
         touches: int,
         ap,
         ml_boost: float,
+        is_market: bool = True,
     ) -> Signal | None:
         """Score bounce by wall quality: proximity + level age + touches.
 
@@ -284,7 +294,7 @@ class WallBounce(BaseStrategy):
             entry_price=entry,
             sl_price=sl,
             tp_price=tp,
-            sub_setup="bounce",
+            sub_setup="bounce_market" if is_market else "bounce_limit",
         )
 
     def _build(

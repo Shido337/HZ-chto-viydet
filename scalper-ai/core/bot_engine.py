@@ -250,7 +250,7 @@ class BotEngine:
                 # Use a tiny cooldown (3s) so the next tick can enter in breakout direction.
                 is_wb_bounce_sl = (
                     pos.setup_type == SetupType.WALL_BOUNCE
-                    and getattr(pos.signal, "sub_setup", "") == "bounce"
+                    and getattr(pos.signal, "sub_setup", "").startswith("bounce")
                     and reason in ("sl_hit", "wall_absorbed")
                 )
                 if is_wb_bounce_sl:

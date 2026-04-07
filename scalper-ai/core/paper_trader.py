@@ -70,8 +70,8 @@ class PaperTrader:
         snap = self.cache.get_snapshot(signal.symbol)
         is_market = (
             signal.setup_type == SetupType.EARLY_MOMENTUM
-            or (signal.setup_type == SetupType.WALL_BOUNCE and signal.sub_setup == "bounce")
-        )  # WB bounce: market fill — we're already at the wall, limit never fills if price trends away
+            or (signal.setup_type == SetupType.WALL_BOUNCE and signal.sub_setup == "bounce_market")
+        )  # bounce_market: CVD pushing price away from wall → fill now; bounce_limit: price heading to wall → wait
 
         if is_market:
             # Market entry: LONG at ask, SHORT at bid (taker)
@@ -270,7 +270,7 @@ class PaperTrader:
             # WB bounce: monitor wall absorption — exit early if wall is being eaten
             # BEFORE checking SL so we flip to breakout instead of stopping out
             if (pos.setup_type == SetupType.WALL_BOUNCE
-                    and pos.signal.sub_setup == "bounce"):
+                    and pos.signal.sub_setup.startswith("bounce")):
                 early = self._check_wb_bounce_wall_absorbed(pos, snap)
                 if early:
                     reason, exit_price = early
