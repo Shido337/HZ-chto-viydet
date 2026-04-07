@@ -453,10 +453,34 @@ class PaperTrader:
         is_long = pos.direction == Direction.LONG
         in_profit = (price > pos.entry_price) if is_long else (price < pos.entry_price)
         # SL hit — fill at SL level, not market
+        # WB exception: if wall is still alive at the reference level, price can't
+        # physically cross it — the wall IS the stop. Don't trigger until wall is gone.
         if is_long and price <= pos.sl_price:
-            return ("sl_hit", pos.sl_price)
+            if pos.setup_type == SetupType.WALL_BOUNCE:
+                wall_ref = pos.signal.wall_ref_price
+                if wall_ref > 0:
+                    wall = find_wall(snap.depth_bids, mid_price=snap.price)
+                    if wall and abs(wall[0] - wall_ref) / wall_ref < 0.003:
+                        pass  # wall still there — let it absorb, no SL yet
+                    else:
+                        return ("sl_hit", pos.sl_price)
+                else:
+                    return ("sl_hit", pos.sl_price)
+            else:
+                return ("sl_hit", pos.sl_price)
         if not is_long and price >= pos.sl_price:
-            return ("sl_hit", pos.sl_price)
+            if pos.setup_type == SetupType.WALL_BOUNCE:
+                wall_ref = pos.signal.wall_ref_price
+                if wall_ref > 0:
+                    wall = find_wall(snap.depth_asks, mid_price=snap.price)
+                    if wall and abs(wall[0] - wall_ref) / wall_ref < 0.003:
+                        pass  # wall still there — let it absorb, no SL yet
+                    else:
+                        return ("sl_hit", pos.sl_price)
+                else:
+                    return ("sl_hit", pos.sl_price)
+            else:
+                return ("sl_hit", pos.sl_price)
         # TP hit — fill at TP level, not market
         if is_long and price >= pos.tp_price:
             return ("tp_hit", pos.tp_price)
