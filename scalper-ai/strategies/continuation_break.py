@@ -19,7 +19,7 @@ BODY_MIN_PCT = 0.004           # 0.4% min body on break candle — filters noise
 BREAK_CLEARANCE_PCT = 0.0005   # break candle must close 0.05% beyond swing — BODY_MIN_PCT=0.4% is the real gate;
                                # 0.15% was over-filtering: large-body candles starting below swing had
                                # clearance 0.08-0.13% despite being real breaks (BCH missed trade 02:05)
-RETEST_PROXIMITY_PCT = 0.015   # price within 1.5% of level = retest zone (was 0.6% — too tight)
+RETEST_PROXIMITY_PCT = 0.025   # price within 2.5% of level = retest zone
 RETEST_OVERSHOOT_PCT = 0.005   # allow up to 0.5% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
 MIN_RR = 1.0                   # minimum 1.0:1 — trailing adds upside

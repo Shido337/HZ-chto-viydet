@@ -73,3 +73,7 @@ Files: strategies/early_momentum.py, core/bot_engine.py
 ## [2026-04-07 00:43 UTC]
 fix: aggressively relax all strategy thresholds to generate actual signals
 Files: strategies/early_momentum.py, strategies/continuation_break.py, strategies/mean_reversion.py, strategies/wall_bounce.py, strategies/base_strategy.py, data/cache.py, core/bot_engine.py
+
+## [2026-04-07 00:52 UTC]
+fix: widen WB SL floor (0.3%/0.5xATR), EM ATR compression 90-0.15x, CB retest 2.5%, EM-TREND cvd20s min=50
+Files: strategies/wall_bounce.py, strategies/early_momentum.py, strategies/continuation_break.py, core/bot_engine.py

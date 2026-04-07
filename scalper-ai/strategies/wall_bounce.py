@@ -48,7 +48,7 @@ VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
-MIN_RR: float           = 1.0     # minimum reward-to-risk ratio
+MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
 
 
 class WallBounce(BaseStrategy):
@@ -169,7 +169,8 @@ class WallBounce(BaseStrategy):
                         and snap.cvd_delta_20s >= 0
                         and ob >= 0.48):
                     entry = wp * (1 + BOUNCE_ENTRY_GAP)  # limit just above wall (maker)
-                    sl = wp * (1 - SL_BUFFER_PCT)
+                    min_sl_dist = max(entry * 0.003, ap.atr_value * 0.5) if ap.atr_value > 0 else entry * 0.003
+                    sl = min(wp * (1 - SL_BUFFER_PCT), entry - min_sl_dist)
                     sl_dist = (entry - sl) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None
@@ -190,7 +191,8 @@ class WallBounce(BaseStrategy):
                         and snap.cvd_delta_20s <= 0
                         and ob <= 0.52):
                     entry = wp * (1 - BOUNCE_ENTRY_GAP)  # limit just below wall (maker)
-                    sl = wp * (1 + SL_BUFFER_PCT)
+                    min_sl_dist = max(entry * 0.003, ap.atr_value * 0.5) if ap.atr_value > 0 else entry * 0.003
+                    sl = max(wp * (1 + SL_BUFFER_PCT), entry + min_sl_dist)
                     sl_dist = (sl - entry) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None

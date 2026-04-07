@@ -659,10 +659,10 @@ class BotEngine:
         em_adx_low = 12.0 + atr_pct * 0.08              # range ~12–20
         em_adx_high = 40.0 - atr_pct * 0.10             # range ~30–40
         em_adx_high = max(em_adx_high, em_adx_low + 5)  # ensure window >= 5
-        # EM: ATR compression — quiet markets accept higher pct, active need genuine compression
-        em_atr_compression = 80.0 - atr_pct * 0.30      # range ~50–80
+        # EM: ATR compression — lenient: allow entry in most volatility conditions
+        em_atr_compression = 90.0 - atr_pct * 0.15      # range ~75–90
         # EM: CVD buildup bars — active markets need more confirmation
-        em_cvd_bars = 2 if atr_pct < 50 else 3
+        em_cvd_bars = 2  # always 2 bars — majority rule handles noise
         # MR: sweep window — quiet markets need wider window to catch sweeps
         mr_sweep_window = 7 if atr_pct < 30 else (5 if atr_pct < 70 else 4)
 
