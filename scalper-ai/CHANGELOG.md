@@ -81,3 +81,7 @@ Files: strategies/wall_bounce.py, strategies/early_momentum.py, strategies/conti
 ## [2026-04-07 01:01 UTC]
 fix: clamp score components at 0, EM trending uses ADX for structure, remove CB rejection candle check
 Files: core/signal_generator.py, strategies/early_momentum.py, strategies/continuation_break.py
+
+## [2026-04-07 01:04 UTC]
+fix: EM trending path only needs regime+CVD (remove OB and trend_alignment checks)
+Files: strategies/early_momentum.py

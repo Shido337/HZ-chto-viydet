@@ -49,25 +49,14 @@ class EarlyMomentum(BaseStrategy):
                 return None
             return self._build_signal(snap, direction, ml_boost)
 
-        # Path 2: TRENDING regime (ADX > em_adx_high) — impulse momentum, no ATR compression
+        # Path 2: TRENDING regime (ADX > em_adx_high) — impulse momentum
+        # Only need: regime direction + CVD 20s confirmation (no OB/EMA checks —
+        # regime already confirmed trend, CVD confirms momentum)
         if adx_val > ap.em_adx_high and snap.regime in (
             MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
         ):
             direction = self._check_trending_impulse(snap)
             if direction is None:
-                return None
-            if not self._check_trend_alignment(snap, direction):
-                from loguru import logger
-                logger.info(f"[EM-DBG] {snap.symbol} trend_align FAIL dir={direction.value}")
-                return None
-            ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
-            if direction == Direction.LONG and ob < TRENDING_OB_MIN:
-                from loguru import logger
-                logger.info(f"[EM-DBG] {snap.symbol} ob={ob:.2f} < {TRENDING_OB_MIN} FAIL")
-                return None
-            if direction == Direction.SHORT and ob > (1 - TRENDING_OB_MIN):
-                from loguru import logger
-                logger.info(f"[EM-DBG] {snap.symbol} ob={ob:.2f} > {1-TRENDING_OB_MIN} FAIL")
                 return None
             return self._build_signal(snap, direction, ml_boost, is_trending=True)
 
