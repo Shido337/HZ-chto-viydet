@@ -287,3 +287,7 @@ Files: core/bot_engine.py
 ## [2026-04-07 13:01 UTC]
 feat: WB bounce early exit on wall_absorbed 30pct — detect breakout before SL, flip immediately
 Files: core/paper_trader.py, core/bot_engine.py
+
+## [2026-04-07 13:27 UTC]
+fix: wall_absorbed reversal signal + cooldown math + Signal.timestamp->PendingOrder.created_at
+Files: core/bot_engine.py, core/paper_trader.py

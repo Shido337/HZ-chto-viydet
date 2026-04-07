@@ -210,7 +210,7 @@ class PaperTrader:
                 expired.append(order)
                 logger.info(
                     f"[PAPER] Limit EXPIRED {symbol} "
-                    f"@ {order.entry_price:.6f} (not filled in {int(now - order.signal.timestamp)}s)",
+                    f"@ {order.entry_price:.6f} (not filled in {int(now - order.created_at)}s)",
                 )
             elif order.setup_type == SetupType.WALL_BOUNCE:
                 # Wall-gone guard: cancel WB limit if the wall we bounced off disappeared

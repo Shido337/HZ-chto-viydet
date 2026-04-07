@@ -11,7 +11,7 @@ from loguru import logger
 from core.paper_trader import PaperTrader
 from core.regime_classifier import RegimeClassifier
 from core.risk_manager import RiskManager
-from core.signal_generator import PendingOrder, Signal
+from core.signal_generator import Direction, PendingOrder, ScoreComponents, SetupType, Signal
 from core.coin_screener import CoinScreener, SCREENER_INTERVAL
 from data.cache import AdaptiveParams, LocalOrderBook, MarketCache, MarketRegime
 from exchange.binance_client import BinanceClient
@@ -254,7 +254,26 @@ class BotEngine:
                     and reason in ("sl_hit", "wall_absorbed")
                 )
                 if is_wb_bounce_sl:
-                    self._signal_cooldown[pos.symbol] = now + 3
+                    # wall_absorbed: clear cooldown entirely → direct reversal signal is queued
+                    # sl_hit: 3s pause (store now-12 so 15s window expires in 3s)
+                    if reason == "wall_absorbed":
+                        self._signal_cooldown.pop(pos.symbol, None)
+                        rev = self._make_wall_absorbed_reversal(pos)
+                        if rev:
+                            logger.info(
+                                f"[REVERSAL] {pos.symbol} {rev.direction.value} "
+                                f"absorption after wall_absorbed bounce "
+                                f"entry={rev.entry_price:.6f} sl={rev.sl_price:.6f}",
+                            )
+                            self.signals.append(rev)
+                            if len(self.signals) > MAX_SIGNALS_HISTORY:
+                                self.signals = self.signals[-MAX_SIGNALS_HISTORY:]
+                            if self._on_signal:
+                                await self._on_signal(rev)
+                            if not self.risk.check_daily_limit():
+                                await self._process_signal(rev)
+                    else:
+                        self._signal_cooldown[pos.symbol] = now - 12
                     # Don't increment loss counter — wall break is structural, not a bad signal
                 else:
                     # Loss: progressive cooldown based on consecutive losses
@@ -300,6 +319,67 @@ class BotEngine:
                 await self._process_signal(signal)
 
     # -- signal search ------------------------------------------------------
+
+    def _make_wall_absorbed_reversal(self, pos: Any) -> Signal | None:
+        """Build a direct absorption reversal signal when WB bounce wall is absorbed.
+
+        When find_wall() can no longer detect the wall (qty dropped below threshold),
+        we use the position's entry price as the wall reference and current price as entry.
+        This bypasses the detection gap and fires the breakout trade immediately.
+        """
+        snap = self.cache.get_snapshot(pos.symbol)
+        if snap.stale or not snap.price:
+            return None
+        ap = self.cache.get_adaptive_params(pos.symbol)
+        atr = ap.atr_value if ap.atr_value > 0 else snap.price * 0.003
+
+        # Wall price ≈ bounce entry price (limit was placed just inside the wall)
+        wall_p = pos.entry_price
+        if not wall_p:
+            return None
+
+        if pos.direction == Direction.SHORT:
+            # Was SHORT from ASK wall → ASK wall absorbed by buyers → go LONG
+            d = Direction.LONG
+            entry = snap.price  # price at/above wall now
+            sl = max(wall_p * (1 - max(atr * 1.2 / wall_p, 0.003)), entry * 0.990)
+            if sl >= entry:
+                return None
+            tp = entry + (entry - sl) * 2.0
+        else:
+            # Was LONG from BID wall → BID wall absorbed by sellers → go SHORT
+            d = Direction.SHORT
+            entry = snap.price
+            sl = min(wall_p * (1 + max(atr * 1.2 / wall_p, 0.003)), entry * 1.010)
+            if sl <= entry:
+                return None
+            tp = entry - (sl - entry) * 2.0
+
+        if not (entry > 0 and sl > 0 and tp > 0):
+            return None
+        rr = abs(tp - entry) / abs(entry - sl)
+        if rr < 1.5:
+            return None
+
+        comp = ScoreComponents(
+            cvd_alignment=0.20,        # absorbed wall confirmed order flow
+            ob_imbalance=0.15,
+            volume_confirmation=0.10,
+            structure_quality=0.15,    # wall proved itself by absorbing
+            regime_match=0.10,
+            ml_boost=0.0,
+        )
+        return Signal(
+            symbol=pos.symbol,
+            direction=d,
+            setup_type=SetupType.WALL_BOUNCE,
+            score=round(comp.total(), 3),
+            components=comp,
+            entry_price=entry,
+            sl_price=sl,
+            tp_price=tp,
+            sub_setup="absorption",
+        )
 
     def _find_signal(self, snap: Any) -> Signal | None:
         """Run strategies and return the first valid signal (no voting delay)."""
