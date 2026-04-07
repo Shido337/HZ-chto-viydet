@@ -608,17 +608,17 @@ class BotEngine:
 
         # --- Trailing distances (ATR-relative) ---
         if regime in (MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR):
-            trail_activation = 0.5   # activate after meaningful move in trends
-            trail_distance = 0.4     # wider trail to let winners run
-            be_trigger = 0.35
+            trail_activation = 0.3   # activate early in trends
+            trail_distance = 0.25    # moderate trail — allows small pullbacks
+            be_trigger = 0.25
         elif regime == MarketRegime.HIGH_VOL:
             trail_activation = 0.6   # moderate in high vol
             trail_distance = 0.4     # wider trail for noise
             be_trigger = 0.5
         else:  # RANGING / LOW_VOL
-            trail_activation = 0.5
-            trail_distance = 0.35
-            be_trigger = 0.40
+            trail_activation = 0.4
+            trail_distance = 0.25
+            be_trigger = 0.35
 
         # --- OB & volume thresholds adjusted by ATR percentile ---
         # Low ATR percentile = quiet market → relax filters to find trades
@@ -634,7 +634,7 @@ class BotEngine:
             vol_spike_min = 0.9
 
         # --- Learner feedback into min_score ---
-        base_score = 0.50
+        base_score = 0.55
         # Check enabled setup types and use the most conservative (tightest) adjustment
         adjustments: list[float] = []
         for setup_name, enabled in self.strategy_enabled.items():

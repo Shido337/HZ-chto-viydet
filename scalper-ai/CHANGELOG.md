@@ -97,3 +97,7 @@ Files: strategies/early_momentum.py, core/bot_engine.py, core/paper_trader.py
 ## [2026-04-07 01:33 UTC]
 fix: EM SL floor 0.5pct to prevent noise stops
 Files: strategies/early_momentum.py
+
+## [2026-04-07 01:43 UTC]
+tune: revert trailing to tight (0.3/0.25), raise min_score to 0.55
+Files: core/bot_engine.py, strategies/base_strategy.py, data/cache.py
