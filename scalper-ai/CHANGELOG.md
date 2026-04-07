@@ -213,3 +213,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 12:43 UTC]
 fix: bounce regime guard — block LONG in TRENDING_BEAR, SHORT in TRENDING_BULL. Trend pressure breaks walls in these regimes.
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 12:51 UTC]
+fix: absorption fires on eaten wall without CVD min; bounce blocked if wall >15% absorbed
+Files: strategies/wall_bounce.py

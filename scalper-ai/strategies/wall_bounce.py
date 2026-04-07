@@ -47,6 +47,7 @@ WALL_MIN_SECS: float       = 5.0     # wall must be present ≥5 s (spoof filter
 MAX_ABSORPTION_DIST_PCT: float = 0.020  # wall must be within 2.0% of price for absorption
 VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
+BOUNCE_MAX_ABS_PCT: float = 0.15  # if wall already >15% absorbed → don't bounce (it's breaking)
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
 MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
@@ -102,7 +103,9 @@ class WallBounce(BaseStrategy):
                     and not wall_is_spoof(snap.wall_history, wp, "ask")):
                 # round_number NOT required — a 40%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
-                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s >= MIN_CVD_BUILD:
+                # CVD not required: absorbed wall IS the order-flow signal.
+                # Only block if CVD is strongly opposing (bearish into a bull breakout).
+                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s >= -MIN_CVD_BUILD:
                     entry = wp  # limit AT wall level — fills when price breaks through it
                     atr = ap.atr_value
                     raw_sl = entry - max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 - 0.003)
@@ -128,7 +131,9 @@ class WallBounce(BaseStrategy):
                     and not wall_is_spoof(snap.wall_history, wp, "bid")):
                 # round_number NOT required — a 55%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
-                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s <= -MIN_CVD_BUILD:
+                # CVD not required: absorbed wall IS the order-flow signal.
+                # Only block if CVD is strongly opposing (bullish into a bear breakout).
+                if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s <= MIN_CVD_BUILD:
                     entry = wp  # limit AT wall level — fills when price breaks through it
                     atr = ap.atr_value
                     raw_sl = entry + max(atr * 1.2, entry * 0.003) if atr > 0 else entry * (1 + 0.003)
@@ -165,9 +170,11 @@ class WallBounce(BaseStrategy):
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                # Regime guard: bid walls break under strong bear trend (TRENDING_BEAR)
-                # Don't fight directional pressure — walls only hold in neutral/aligned regimes
+                # Regime guard: bid walls break under strong bear trend
                 if snap.regime == MarketRegime.TRENDING_BEAR:
+                    return None
+                # Absorption guard: if wall already being eaten → it's a breakout, not a bounce
+                if wall_absorption_pct(snap.wall_history, wp, "bid") >= BOUNCE_MAX_ABS_PCT:
                     return None
                 touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
@@ -190,8 +197,11 @@ class WallBounce(BaseStrategy):
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                # Regime guard: ask walls break under strong bull trend (TRENDING_BULL)
+                # Regime guard: ask walls break under strong bull trend
                 if snap.regime == MarketRegime.TRENDING_BULL:
+                    return None
+                # Absorption guard: if wall already being eaten → it's a breakout, not a bounce
+                if wall_absorption_pct(snap.wall_history, wp, "ask") >= BOUNCE_MAX_ABS_PCT:
                     return None
                 touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
