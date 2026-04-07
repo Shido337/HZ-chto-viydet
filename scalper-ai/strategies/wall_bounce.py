@@ -5,20 +5,17 @@ Two sub-setups, mutually exclusive (absorption tried first):
   BOUNCE     Price approaching wall from safe side.
              Entry: limit order just in front of the wall (maker / GTX).
              Thesis: wall holds → price reverses.
-             Filters: round number + wall stable ≥5 s + ≥2 level touches
-                      + VEI < 1.2 + CVD not opposing + OB aligned.
+             Filters: spoof detection + wall stable ≥5 s + ≥1 level touch
+                      + VEI < 1.5 + CVD not opposing + OB aligned.
 
-  ABSORPTION Wall is actively being eaten (≥40 % absorbed in last 30 s).
+  ABSORPTION Wall is actively being eaten (≥30 % absorbed in last 30 s).
              Entry: market order — window is narrow, wall won't last.
              Thesis: wall breaks → price continues through it.
-             Filters: round number + wall stable + absorption ≥40 %
+             Filters: spoof detection + wall stable ≥5 s + absorption ≥30 %
                       + CVD strongly in direction.
-             (level touches NOT required — persistent absorption already
-              proves the level was real and held long enough.)
 
-The two setups never conflict: absorption is checked first; if found, bounce
-is skipped entirely.  If absorption is zero (wall intact, not being eaten),
-bounce is evaluated.
+Spoof detection: walls that flicker (appear/disappear 3+ times) or fade
+in qty as price approaches (qty drops ≥25 %) are blocked.
 """
 from __future__ import annotations
 
@@ -28,7 +25,7 @@ from data.indicators import (
     order_book_imbalance,
     wall_absorption_pct,
     wall_stable,
-    wall_on_round_number,
+    wall_is_spoof,
     count_level_touches,
     vei,
 )
@@ -42,7 +39,7 @@ BOUNCE_DIST_PCT: float  = 0.012   # price within 1.2 % of wall (was 0.3%)
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
 ABSORPTION_PCT: float   = 0.30    # ≥30 % wall qty absorbed = active absorption
 MIN_CVD_BUILD: float    = 50.0    # minimum |CVD delta 20s| for absorption
-WALL_MIN_SECS: float       = 3.0     # wall must be present ≥3 s (spoof filter)
+WALL_MIN_SECS: float       = 5.0     # wall must be present ≥5 s (spoof filter)
 MAX_ABSORPTION_DIST_PCT: float = 0.020  # wall must be within 2.0% of price for absorption
 VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
@@ -97,7 +94,8 @@ class WallBounce(BaseStrategy):
             ask_dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if (snap.price < wp
                     and ask_dist <= MAX_ABSORPTION_DIST_PCT
-                    and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)):
+                    and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
+                    and not wall_is_spoof(snap.wall_history, wp, "ask")):
                 # round_number NOT required — a 40%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "ask")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s >= MIN_CVD_BUILD:
@@ -122,7 +120,8 @@ class WallBounce(BaseStrategy):
             bid_dist = (snap.price - wp) / wp if wp else 1.0
             if (snap.price > wp
                     and bid_dist <= MAX_ABSORPTION_DIST_PCT
-                    and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)):
+                    and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
+                    and not wall_is_spoof(snap.wall_history, wp, "bid")):
                 # round_number NOT required — a 55%+ absorbed wall proved itself real
                 abs_pct = wall_absorption_pct(snap.wall_history, wp, "bid")
                 if abs_pct >= ABSORPTION_PCT and snap.cvd_delta_20s <= -MIN_CVD_BUILD:
@@ -163,8 +162,8 @@ class WallBounce(BaseStrategy):
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                if (wall_on_round_number(wp)
-                        and wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
+                if (wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
+                        and not wall_is_spoof(snap.wall_history, wp, "bid")
                         and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
                         and snap.cvd_delta_20s >= 0
                         and ob >= 0.48):
@@ -185,8 +184,8 @@ class WallBounce(BaseStrategy):
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
-                if (wall_on_round_number(wp)
-                        and wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
+                if (wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
+                        and not wall_is_spoof(snap.wall_history, wp, "ask")
                         and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
                         and snap.cvd_delta_20s <= 0
                         and ob <= 0.52):

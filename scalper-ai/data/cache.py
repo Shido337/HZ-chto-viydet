@@ -42,6 +42,7 @@ class WallSnapshot:
     bid_wall_qty: float = 0.0
     ask_wall_price: float = 0.0
     ask_wall_qty: float = 0.0
+    mid_price: float = 0.0  # mid-price at snapshot time (for spoof detection)
 
 
 @dataclass(frozen=True)
@@ -360,6 +361,7 @@ class MarketCache:
                 ts=time.time(),
                 bid_wall_price=bp, bid_wall_qty=bq,
                 ask_wall_price=ap, ask_wall_qty=aq,
+                mid_price=mid,
             ))
 
     async def update_agg_trade(

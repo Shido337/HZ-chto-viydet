@@ -252,6 +252,86 @@ def bucket_levels(
     return [(best[i][1], totals[i]) for i in sorted(totals)]
 
 
+def wall_is_spoof(
+    history: tuple,
+    wall_price: float,
+    side: str,
+    match_pct: float = 0.001,
+    min_samples: int = 30,
+) -> bool:
+    """Detect spoof walls: qty decreases as price approaches the wall.
+
+    Classic spoof pattern: a large order is placed far from price to create
+    the illusion of support/resistance, then pulled as price gets close.
+    We detect this by correlating price proximity with wall qty changes.
+
+    Algorithm:
+      1. Collect wall snapshots matching *wall_price* (±match_pct).
+      2. For each snapshot compute: distance = |mid_price − wall_price| / wall_price.
+      3. Split into two halves by time (earlier vs later).
+      4. If qty in the later half is significantly LOWER while price is CLOSER,
+         the wall is likely a spoof.
+      5. Also flag walls that have disappeared >2 times in their history
+         (flickering = spoof tactic to avoid detection).
+
+    Returns True if the wall appears to be a spoof → should NOT trade it.
+    """
+    if len(history) < min_samples:
+        return False  # insufficient data to judge
+
+    thresh = wall_price * match_pct
+
+    # Collect matching snapshots: (distance_to_wall, qty, present)
+    samples: list[tuple[float, float, bool]] = []
+    for snap in history:
+        if side == "ask":
+            present = abs(snap.ask_wall_price - wall_price) <= thresh and snap.ask_wall_qty > 0
+            qty = snap.ask_wall_qty if present else 0.0
+        else:
+            present = abs(snap.bid_wall_price - wall_price) <= thresh and snap.bid_wall_qty > 0
+            qty = snap.bid_wall_qty if present else 0.0
+        dist = abs(snap.mid_price - wall_price) / wall_price if wall_price > 0 else 1.0
+        samples.append((dist, qty, present))
+
+    # --- Check 1: Flickering (wall appears/disappears repeatedly) ---
+    # Count transitions from present → absent
+    flickers = 0
+    was_present = False
+    for _, _, present in samples:
+        if was_present and not present:
+            flickers += 1
+        was_present = present
+    if flickers >= 3:
+        return True  # wall flickered 3+ times → almost certainly spoof
+
+    # --- Check 2: Qty fading as price approaches ---
+    # Only use samples where wall is present
+    present_samples = [(d, q) for d, q, p in samples if p]
+    if len(present_samples) < 10:
+        return False
+
+    # Split into earlier (first 40%) and later (last 40%) by order
+    n = len(present_samples)
+    early_end = max(1, int(n * 0.4))
+    late_start = n - max(1, int(n * 0.4))
+
+    early = present_samples[:early_end]
+    late = present_samples[late_start:]
+
+    early_avg_qty = sum(q for _, q in early) / len(early)
+    late_avg_qty = sum(q for _, q in late) / len(late)
+    early_avg_dist = sum(d for d, _ in early) / len(early)
+    late_avg_dist = sum(d for d, _ in late) / len(late)
+
+    # If price got closer AND qty dropped significantly → spoof
+    if early_avg_qty > 0 and late_avg_dist < early_avg_dist:
+        qty_drop_pct = (early_avg_qty - late_avg_qty) / early_avg_qty
+        if qty_drop_pct >= 0.25:
+            return True  # qty dropped ≥25% as price approached
+
+    return False
+
+
 def find_wall(
     levels: tuple | list,
     multiplier: float = 5.0,

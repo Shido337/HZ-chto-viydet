@@ -153,3 +153,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 08:23 UTC]
 tune: re-enable EM-TREND strict, revert SL=0.8% + CVD exit 0.2% + WB original TP, keep TP recalc fix + progressive cooldown
 Files: strategies/early_momentum.py, core/paper_trader.py, strategies/wall_bounce.py
+
+## [2026-04-07 09:22 UTC]
+feat: spoof wall detection — flickering + qty-fade-on-approach filter, replaces round_number check
+Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py, core/bot_engine.py
