@@ -264,8 +264,8 @@ class PaperTrader:
             pos = self.positions[symbol]
             ap = snap.adaptive
             self._update_price_tracking(pos, snap.price)
-            # WB wall-gone guard: if the wall disappeared, tighten SL to just past the wall level
-            if pos.setup_type == SetupType.WALL_BOUNCE:
+            # WB wall-gone guard: only for absorption — bounce SL is already tight behind wall
+            if pos.setup_type == SetupType.WALL_BOUNCE and pos.signal.sub_setup == "absorption":
                 self._check_wb_wall_gone(pos, snap)
             self._check_breakeven(pos, snap.price, ap)
             self._check_trailing(pos, snap.price, ap)

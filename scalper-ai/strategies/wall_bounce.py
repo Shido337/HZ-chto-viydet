@@ -168,8 +168,7 @@ class WallBounce(BaseStrategy):
                         and snap.cvd_delta_20s >= 0
                         and ob >= 0.48):
                     entry = wp * (1 + BOUNCE_ENTRY_GAP)  # limit just above wall (maker)
-                    min_sl_dist = max(entry * 0.003, ap.atr_value * 0.5) if ap.atr_value > 0 else entry * 0.003
-                    sl = min(wp * (1 - SL_BUFFER_PCT), entry - min_sl_dist)
+                    sl = wp * (1 - SL_BUFFER_PCT)  # SL strictly behind wall — thesis = wall holds
                     sl_dist = (entry - sl) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None
@@ -190,8 +189,7 @@ class WallBounce(BaseStrategy):
                         and snap.cvd_delta_20s <= 0
                         and ob <= 0.52):
                     entry = wp * (1 - BOUNCE_ENTRY_GAP)  # limit just below wall (maker)
-                    min_sl_dist = max(entry * 0.003, ap.atr_value * 0.5) if ap.atr_value > 0 else entry * 0.003
-                    sl = max(wp * (1 + SL_BUFFER_PCT), entry + min_sl_dist)
+                    sl = wp * (1 + SL_BUFFER_PCT)  # SL strictly behind wall — thesis = wall holds
                     sl_dist = (sl - entry) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None
@@ -282,4 +280,5 @@ class WallBounce(BaseStrategy):
             entry_price=entry,
             sl_price=sl,
             tp_price=tp,
+            sub_setup=mode,
         )
