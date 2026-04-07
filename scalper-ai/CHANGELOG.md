@@ -323,3 +323,7 @@ Files: core/bot_engine.py
 ## [2026-04-07 15:42 UTC]
 feat: reversal uses spoof+absorption detection instead of CVD gate
 Files: core/bot_engine.py
+
+## [2026-04-07 16:12 UTC]
+fix: raise absorption threshold 15pct to 50pct for reversal
+Files: core/bot_engine.py

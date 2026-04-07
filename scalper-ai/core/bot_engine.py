@@ -347,8 +347,8 @@ class BotEngine:
             if wall_is_spoof(snap.wall_history, wall_p, side):
                 return None  # wall pulled without being eaten → spoof, skip
             abs_pct = wall_absorption_pct(snap.wall_history, wall_p, side, min_hist=5)
-            if abs_pct < 0.15:
-                return None  # wall just removed, not absorbed → skip
+            if abs_pct < 0.50:
+                return None  # wall not sufficiently absorbed → skip
             d = Direction.LONG
             entry = snap.price
             sl = max(wall_p * (1 - max(atr * 1.2 / wall_p, 0.003)), entry * 0.990)
@@ -361,8 +361,8 @@ class BotEngine:
             if wall_is_spoof(snap.wall_history, wall_p, side):
                 return None  # wall pulled without being eaten → spoof, skip
             abs_pct = wall_absorption_pct(snap.wall_history, wall_p, side, min_hist=5)
-            if abs_pct < 0.15:
-                return None  # wall just removed, not absorbed → skip
+            if abs_pct < 0.50:
+                return None  # wall not sufficiently absorbed → skip
             d = Direction.SHORT
             entry = snap.price
             sl = min(wall_p * (1 + max(atr * 1.2 / wall_p, 0.003)), entry * 1.010)
