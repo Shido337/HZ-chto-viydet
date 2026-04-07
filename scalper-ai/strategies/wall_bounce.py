@@ -41,14 +41,14 @@ from strategies.base_strategy import BaseStrategy
 BOUNCE_DIST_PCT: float  = 0.005   # price within 0.5% of wall — tighter = better edge, smaller SL
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
 BOUNCE_MIN_SCORE: float = 0.60    # lower threshold — wall quality IS the signal, not CVD/OB
-ABSORPTION_PCT: float   = 0.30    # ≥30 % wall qty absorbed = active absorption
+ABSORPTION_PCT: float   = 0.50    # ≥50 % wall qty absorbed = active absorption (30% too early — wall still 70% alive)
 MIN_CVD_BUILD: float    = 50.0    # minimum |CVD delta 20s| for absorption
 WALL_MIN_SECS: float       = 5.0     # wall must be present ≥5 s (spoof filter)
 MAX_ABSORPTION_DIST_PCT: float = 0.020  # wall must be within 2.0% of price for absorption
 VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 BOUNCE_MAX_ABS_PCT: float = 0.25  # if wall already >25% absorbed → don't bounce, it's breaking
-SL_BUFFER_PCT: float    = 0.0025  # 0.25% buffer beyond wall for bounce SL
+SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
 MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
 
@@ -180,9 +180,15 @@ class WallBounce(BaseStrategy):
                 if (wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "bid")
                         and touches >= BOUNCE_MIN_TOUCHES):
+                    # Block HIGH_VOL regime — walls break in both directions
+                    if snap.regime == MarketRegime.HIGH_VOL:
+                        return None
                     # If CVD is positive (buyers pushing price UP, away from wall) → market entry now.
-                    # Otherwise → limit just above wall, wait for price to touch.
+                    # If CVD is strongly negative (sellers dominant) → wall likely to break, skip.
+                    # Only place limit when CVD is mildly negative or neutral.
                     going_away = snap.cvd_delta_20s > 0
+                    if not going_away and snap.cvd_delta_20s < -MIN_CVD_BUILD:
+                        return None  # sellers too strong — bid wall will likely break
                     if going_away:
                         entry = snap.price
                     else:
@@ -212,9 +218,15 @@ class WallBounce(BaseStrategy):
                 if (wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "ask")
                         and touches >= BOUNCE_MIN_TOUCHES):
+                    # Block HIGH_VOL regime — walls break in both directions
+                    if snap.regime == MarketRegime.HIGH_VOL:
+                        return None
                     # If CVD is negative (sellers pushing price DOWN, away from wall) → market entry now.
-                    # Otherwise → limit just below wall, wait for price to touch.
+                    # If CVD is strongly positive (buyers dominant) → wall likely to break, skip.
+                    # Only place limit when CVD is mildly positive or neutral.
                     going_away = snap.cvd_delta_20s < 0
+                    if not going_away and snap.cvd_delta_20s > MIN_CVD_BUILD:
+                        return None  # buyers too strong — ask wall will likely break
                     if going_away:
                         entry = snap.price
                     else:

@@ -351,3 +351,7 @@ Files: data/cache.py
 ## [2026-04-07 20:35 UTC]
 fix: WB breakeven uses 50% of TP distance instead of ATR-based trigger
 Files: core/paper_trader.py
+
+## [2026-04-07 23:04 UTC]
+fix: WB entry - block limit when CVD opposes, raise absorption to 50%, block HIGH_VOL
+Files: strategies/wall_bounce.py
