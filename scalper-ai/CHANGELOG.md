@@ -105,3 +105,7 @@ Files: core/bot_engine.py, strategies/base_strategy.py, data/cache.py
 ## [2026-04-07 01:54 UTC]
 fix: global 0.8pct SL cap in paper_trader to limit max loss per trade
 Files: core/paper_trader.py
+
+## [2026-04-07 02:01 UTC]
+fix: EM-TREND soft OB guard + price momentum confirmation to improve win rate
+Files: strategies/early_momentum.py

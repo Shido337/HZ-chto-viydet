@@ -50,14 +50,19 @@ class EarlyMomentum(BaseStrategy):
             return self._build_signal(snap, direction, ml_boost)
 
         # Path 2: TRENDING regime (ADX > em_adx_high) — impulse momentum
-        # Only need: regime direction + CVD 20s confirmation (no OB/EMA checks —
-        # regime already confirmed trend, CVD confirms momentum)
+        # Regime direction + CVD 20s + soft OB guard (OB shouldn't be strongly against us)
         if adx_val > ap.em_adx_high and snap.regime in (
             MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
         ):
             direction = self._check_trending_impulse(snap)
             if direction is None:
                 return None
+            # Soft OB guard: reject if OB is strongly opposing our direction
+            ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
+            if direction == Direction.LONG and ob < 0.35:
+                return None  # sellers dominating too much for a LONG
+            if direction == Direction.SHORT and ob > 0.65:
+                return None  # buyers dominating too much for a SHORT
             return self._build_signal(snap, direction, ml_boost, is_trending=True)
 
         return None
@@ -72,7 +77,7 @@ class EarlyMomentum(BaseStrategy):
         return pct < snap.adaptive.em_atr_compression_pct
 
     def _check_trending_impulse(self, snap: MarketSnapshot) -> Direction | None:
-        """Trending regime impulse: regime direction + 20s CVD delta confirms momentum."""
+        """Trending regime impulse: regime direction + 20s CVD + short-term price momentum."""
         # Direction from regime (trend already confirmed by ADX)
         if snap.regime == MarketRegime.TRENDING_BULL:
             direction = Direction.LONG
@@ -85,6 +90,15 @@ class EarlyMomentum(BaseStrategy):
             return None
         if direction == Direction.SHORT and snap.cvd_delta_20s > -TRENDING_CVD_20S_MIN:
             return None
+        # Short-term price momentum: price must be moving in our direction
+        # (current price vs last 1m candle open confirms impulse, not just CVD spike)
+        candles_1m = list(snap.klines_1m)
+        if len(candles_1m) >= 2:
+            last_open = candles_1m[-1]["o"]
+            if direction == Direction.LONG and snap.price < last_open:
+                return None  # price falling — don't enter LONG
+            if direction == Direction.SHORT and snap.price > last_open:
+                return None  # price rising — don't enter SHORT
         return direction
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:
