@@ -13,14 +13,13 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # ---------------------------------------------------------------------------
 # Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
-PRICE_NEAR_LEVEL_PCT = 0.001  # 0.10% of level — per OFCS spec: price coiling within 0.10%
-CVD_BUILDUP_BARS = 3          # min consecutive 1m bars with accumulating CVD (spec: 3+)
-OB_CONSISTENT_MIN = 0.65      # OB must be ≥65% consistent — per OFCS spec
+PRICE_NEAR_LEVEL_PCT = 0.005  # 0.50% of level — coiling near structure
+OB_CONSISTENT_MIN = 0.55      # OB must be ≥55% consistent
 MIN_RR = 0.5                  # minimum 0.5:1 — trailing compensates
 TREND_EMA_BARS = 20           # 5m EMA for trend alignment
 # Trending momentum (high ADX impulse entry — no ATR compression required)
-TRENDING_OB_MIN = 0.55        # looser OB threshold in strong trend
-TRENDING_CVD_20S_MIN = 500.0  # minimum |cvd_delta_20s| for impulse confirmation
+TRENDING_OB_MIN = 0.50        # loose OB threshold in strong trend
+TRENDING_CVD_20S_MIN = 100.0  # minimum |cvd_delta_20s| for impulse confirmation
 # Adaptive entry constants come from snap.adaptive:
 #   em_adx_low, em_adx_high, em_atr_compression_pct, em_cvd_bars,
 #   ob_min, min_score, tp_rr, max_sl_atr, min_sl_atr, atr_value
@@ -78,16 +77,15 @@ class EarlyMomentum(BaseStrategy):
         return pct < snap.adaptive.em_atr_compression_pct
 
     def _check_trending_impulse(self, snap: MarketSnapshot) -> Direction | None:
-        """Trending regime impulse: CVD buildup + 20s delta confirms direction matches regime."""
-        direction = self._check_cvd_buildup(snap)
-        if direction is None:
+        """Trending regime impulse: regime direction + 20s CVD delta confirms momentum."""
+        # Direction from regime (trend already confirmed by ADX)
+        if snap.regime == MarketRegime.TRENDING_BULL:
+            direction = Direction.LONG
+        elif snap.regime == MarketRegime.TRENDING_BEAR:
+            direction = Direction.SHORT
+        else:
             return None
-        # Direction must align with macro regime
-        if snap.regime == MarketRegime.TRENDING_BULL and direction != Direction.LONG:
-            return None
-        if snap.regime == MarketRegime.TRENDING_BEAR and direction != Direction.SHORT:
-            return None
-        # Short-term CVD impulse must confirm (real momentum, not just 3 doji candles)
+        # Short-term CVD impulse must confirm real momentum
         if direction == Direction.LONG and snap.cvd_delta_20s < TRENDING_CVD_20S_MIN:
             return None
         if direction == Direction.SHORT and snap.cvd_delta_20s > -TRENDING_CVD_20S_MIN:
@@ -95,33 +93,25 @@ class EarlyMomentum(BaseStrategy):
         return direction
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:
-        """Detect CVD accumulation: 3+ consecutive 1m bars with net delta in same direction.
+        """Detect CVD accumulation via majority of recent 1m bars.
 
-        Per OFCS spec: 'CVD building: net positive/negative delta accumulating
-        3+ consecutive 1m bars'. This detects coiling/buildup, NOT a single impulse.
-        Uses closed candles only (skip live forming [-1]).
+        Uses adaptive em_cvd_bars (2 or 3). Requires majority same direction
+        (2/2 or 2/3) — allows one counter-candle in choppy momentum.
         """
+        n_bars = snap.adaptive.em_cvd_bars
         candles_1m = list(snap.klines_1m)
-        if len(candles_1m) < CVD_BUILDUP_BARS + 3:
+        if len(candles_1m) < n_bars + 2:
             return None
 
-        # Examine the last CVD_BUILDUP_BARS closed candles (skip live [-1])
-        # Each candle's contribution to delta = sign of (close - open)
-        closed = candles_1m[-(CVD_BUILDUP_BARS + 1):-1]  # last N closed candles
+        closed = candles_1m[-(n_bars + 1):-1]
+        bullish = sum(1 for c in closed if c["c"] > c["o"])
+        bearish = sum(1 for c in closed if c["c"] < c["o"])
+        min_required = (n_bars // 2) + 1  # majority: 2/3 or 2/2
 
-        # All must be in the same direction (consecutive accumulation)
-        closes_above_opens = [c["c"] > c["o"] for c in closed]
-        closes_below_opens = [c["c"] < c["o"] for c in closed]
-
-        if all(closes_above_opens):
-            # Bullish accumulation — confirm with current CVD direction
-            if snap.cvd_delta_1m > 0:
-                return Direction.LONG
-        elif all(closes_below_opens):
-            # Bearish accumulation — confirm with current CVD direction
-            if snap.cvd_delta_1m < 0:
-                return Direction.SHORT
-
+        if bullish >= min_required:
+            return Direction.LONG
+        if bearish >= min_required:
+            return Direction.SHORT
         return None
 
     def _check_trend_alignment(

@@ -38,17 +38,17 @@ from strategies.base_strategy import BaseStrategy
 # ---------------------------------------------------------------------------
 # Strategy constants
 # ---------------------------------------------------------------------------
-BOUNCE_DIST_PCT: float  = 0.003   # price within 0.3 % of wall to enter
+BOUNCE_DIST_PCT: float  = 0.012   # price within 1.2 % of wall (was 0.3%)
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
-ABSORPTION_PCT: float   = 0.55    # ≥55 % wall qty absorbed = active absorption
-MIN_CVD_BUILD: float    = 150.0   # minimum |CVD delta 1m| for absorption
-WALL_MIN_SECS: float       = 5.0     # wall must be present ≥5 s (spoof filter)
-MAX_ABSORPTION_DIST_PCT: float = 0.015  # wall must be within 1.5% of price for absorption
-VEI_MAX_BOUNCE: float   = 1.2     # bounce skipped when ATR(10)/ATR(50) > 1.2
-BOUNCE_MIN_TOUCHES: int = 2       # level must have been tested ≥2 times
+ABSORPTION_PCT: float   = 0.30    # ≥30 % wall qty absorbed = active absorption
+MIN_CVD_BUILD: float    = 50.0    # minimum |CVD delta 20s| for absorption
+WALL_MIN_SECS: float       = 3.0     # wall must be present ≥3 s (spoof filter)
+MAX_ABSORPTION_DIST_PCT: float = 0.020  # wall must be within 2.0% of price for absorption
+VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
+BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
-MAX_SL_PCT: float       = 0.008   # hard cap: never risk more than 0.8 %
-MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
+MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
+MIN_RR: float           = 1.0     # minimum reward-to-risk ratio
 
 
 class WallBounce(BaseStrategy):

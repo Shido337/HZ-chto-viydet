@@ -19,10 +19,10 @@ BODY_MIN_PCT = 0.004           # 0.4% min body on break candle — filters noise
 BREAK_CLEARANCE_PCT = 0.0005   # break candle must close 0.05% beyond swing — BODY_MIN_PCT=0.4% is the real gate;
                                # 0.15% was over-filtering: large-body candles starting below swing had
                                # clearance 0.08-0.13% despite being real breaks (BCH missed trade 02:05)
-RETEST_PROXIMITY_PCT = 0.006   # price within 0.6% of level = retest zone
-RETEST_OVERSHOOT_PCT = 0.002   # allow up to 0.2% past level (wick through OK)
+RETEST_PROXIMITY_PCT = 0.015   # price within 1.5% of level = retest zone (was 0.6% — too tight)
+RETEST_OVERSHOOT_PCT = 0.005   # allow up to 0.5% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
-MIN_RR = 1.5                   # minimum 1.5:1 (was 0.5 — too loose)
+MIN_RR = 1.0                   # minimum 1.0:1 — trailing adds upside
 MAX_SL_PCT = 0.008             # 0.8% hard cap: kills catastrophic swing-to-swing SLs
 # Adaptive entry constants come from snap.adaptive:
 #   cb_adx_max, ob_min, volume_spike_min, min_score, tp_rr,
@@ -148,7 +148,7 @@ class ContinuationBreak(BaseStrategy):
         # block obvious mismatches: e.g. LONG with 80% ask pressure.
         # Volume is intentionally NOT checked: retest is a low-volume pullback
         # by nature. The break candle already passed body_pct quality check.
-        CB_OB_MIN = 0.35
+        CB_OB_MIN = 0.30
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
         if d == Direction.LONG and ob < CB_OB_MIN:
             return False
@@ -157,26 +157,19 @@ class ContinuationBreak(BaseStrategy):
         return True
 
     def _check_rejection_candle(self, snap: MarketSnapshot, d: Direction) -> bool:
-        """Last CLOSED 1m candle must show rejection at the retest level.
-
-        LONG retest: price should be bouncing — close in upper half of candle range.
-        SHORT retest: price should be failing — close in lower half of candle range.
-        Uses [-2] (closed candle), not [-1] (live forming candle), because during
-        an active retest the live candle moves toward the level and closes in the
-        wrong half, giving a false rejection signal.
-        """
+        """Relaxed candle check: last closed 1m candle shouldn't strongly oppose the trade."""
         candles = list(snap.klines_1m)
         if len(candles) < 2:
             return False
-        cur = candles[-2]  # last confirmed closed candle
+        cur = candles[-2]
         h, l, c = cur["h"], cur["l"], cur["c"]
         candle_range = h - l
         if candle_range <= 0:
-            return True  # degenerate candle — don't reject on zero-range
-        mid = (h + l) / 2.0
+            return True
+        # Only reject if candle closes strongly against direction (bottom/top 25%)
         if d == Direction.LONG:
-            return c >= mid   # close in upper half = bullish rejection of level
-        return c <= mid       # close in lower half = bearish rejection of level
+            return c >= l + candle_range * 0.25
+        return c <= h - candle_range * 0.25
 
     def _build_signal(
         self, snap: MarketSnapshot, d: Direction,

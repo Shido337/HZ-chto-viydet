@@ -14,13 +14,13 @@ from strategies.base_strategy import BaseStrategy, MIN_SCORE
 # Fixed structural constants (geometry, not volatility-dependent)
 # ---------------------------------------------------------------------------
 SWEEP_MIN_PCT = 0.0005    # 0.05% beyond swing — per OFCS spec minimum
-SWEEP_MAX_PCT = 0.0030    # 0.30% beyond swing — per OFCS spec maximum (was 0.80%)
+SWEEP_MAX_PCT = 0.0060    # 0.60% beyond swing — wider to catch more sweeps
 VWAP_DEV_MAX = 0.020      # ±2.0% from VWAP — per OFCS spec: ±1.5% VWAP
 SL_BUFFER_PCT = 0.0005    # 0.05% beyond sweep extreme
 ENTRY_RETRACEMENT = 0.5   # enter at 50% of sweep_extreme→swing_level range
 MIN_RR = 0.5              # minimum 0.5:1 — trailing compensates
 CVD_NORM_MR = 1500.0      # CVD normalizer: ranging markets have lower abs CVD
-OB_FLIP_THRESHOLD = 0.55  # bid/ask flip: must be ≥55% opposite side (per OFCS spec)
+OB_FLIP_THRESHOLD = 0.50  # bid/ask flip: must be ≥50% opposite side
 # Adaptive entry constants come from snap.adaptive:
 #   mr_sweep_window, ob_min (as flip threshold), min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value

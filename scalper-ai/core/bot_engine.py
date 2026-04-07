@@ -256,8 +256,8 @@ class BotEngine:
             # Skip symbols with pending limit orders
             if hasattr(self.trader, "pending") and symbol in self.trader.pending:
                 continue
-            # Signal cooldown: 60s per symbol to prevent spam
-            if now - self._signal_cooldown.get(symbol, 0) < 60:
+            # Signal cooldown: 15s per symbol
+            if now - self._signal_cooldown.get(symbol, 0) < 15:
                 continue
             signal = self._find_signal(snap)
             if signal:
@@ -399,26 +399,17 @@ class BotEngine:
             elif adx_val > ap.em_adx_high and regime in (
                 MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
             ):
-                candles_1m = list(snap.klines_1m)
                 reason = "EM-TREND: "
-                if len(candles_1m) < 6:
-                    reason += "need 6+ 1m candles"
-                else:
-                    n = 3
-                    closed = candles_1m[-(n + 1):-1]
-                    all_up = all(c["c"] > c["o"] for c in closed)
-                    all_dn = all(c["c"] < c["o"] for c in closed)
-                    expected_bull = regime == MarketRegime.TRENDING_BULL
-                    if not all_up and not all_dn:
-                        reason += f"cvd_bars=flat"
-                    elif (expected_bull and not all_up) or (not expected_bull and not all_dn):
-                        reason += f"dir vs regime mismatch bull={expected_bull} up={all_up}"
-                    else:
-                        d_str = "LONG" if all_up else "SHORT"
-                        reason += (
-                            f"{d_str} cvd20s={snap.cvd_delta_20s:.0f} "
-                            f"ob={ob:.2f} adx={adx_val:.1f}"
-                        )
+                expected_dir = "LONG" if regime == MarketRegime.TRENDING_BULL else "SHORT"
+                cvd20 = snap.cvd_delta_20s
+                from strategies.early_momentum import TRENDING_CVD_20S_MIN
+                cvd_ok = (cvd20 >= TRENDING_CVD_20S_MIN if expected_dir == "LONG"
+                          else cvd20 <= -TRENDING_CVD_20S_MIN)
+                reason += (
+                    f"{expected_dir} cvd20s={cvd20:.0f} "
+                    f"ob={ob:.2f} adx={adx_val:.1f} "
+                    f"cvd_ok={cvd_ok}"
+                )
                 logger.info(f"[DIAG] {symbol} {reason}")
 
             # MeanReversion diagnosis (RANGING / LOW_VOL / HIGH_VOL)
@@ -643,7 +634,7 @@ class BotEngine:
             vol_spike_min = 0.9
 
         # --- Learner feedback into min_score ---
-        base_score = 0.65
+        base_score = 0.50
         # Check enabled setup types and use the most conservative (tightest) adjustment
         adjustments: list[float] = []
         for setup_name, enabled in self.strategy_enabled.items():

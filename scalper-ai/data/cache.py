@@ -73,7 +73,7 @@ class AdaptiveParams:
     # Breakeven
     breakeven_trigger_atr: float = 0.4  # BE at 0.4× ATR
     # Score threshold (adjusted by learner)
-    min_score: float = 0.65
+    min_score: float = 0.50
     # Volume threshold (rolling-relative)
     volume_spike_min: float = 0.7
     # OB imbalance threshold
