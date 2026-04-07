@@ -299,3 +299,7 @@ Files: strategies/early_momentum.py
 ## [2026-04-07 14:20 UTC]
 fix: bounce market fill instead of limit — price never drops to limit when trending
 Files: strategies/wall_bounce.py, core/paper_trader.py
+
+## [2026-04-07 14:30 UTC]
+tune: bounce BOUNCE_DIST_PCT 1.2%->0.5% — tighter entry near wall, smaller SL
+Files: strategies/wall_bounce.py

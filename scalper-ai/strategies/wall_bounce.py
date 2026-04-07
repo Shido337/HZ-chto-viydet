@@ -38,7 +38,7 @@ from strategies.base_strategy import BaseStrategy
 # ---------------------------------------------------------------------------
 # Strategy constants
 # ---------------------------------------------------------------------------
-BOUNCE_DIST_PCT: float  = 0.012   # price within 1.2 % of wall
+BOUNCE_DIST_PCT: float  = 0.005   # price within 0.5% of wall — tighter = better edge, smaller SL
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
 BOUNCE_MIN_SCORE: float = 0.60    # lower threshold — wall quality IS the signal, not CVD/OB
 ABSORPTION_PCT: float   = 0.30    # ≥30 % wall qty absorbed = active absorption
