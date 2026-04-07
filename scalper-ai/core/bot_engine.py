@@ -251,7 +251,7 @@ class BotEngine:
                 is_wb_bounce_sl = (
                     pos.setup_type == SetupType.WALL_BOUNCE
                     and getattr(pos.signal, "sub_setup", "") == "bounce"
-                    and reason == "sl_hit"
+                    and reason in ("sl_hit", "wall_absorbed")
                 )
                 if is_wb_bounce_sl:
                     self._signal_cooldown[pos.symbol] = now + 3

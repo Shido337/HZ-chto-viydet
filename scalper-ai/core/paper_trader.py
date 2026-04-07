@@ -264,6 +264,17 @@ class PaperTrader:
             pos = self.positions[symbol]
             ap = snap.adaptive
             self._update_price_tracking(pos, snap.price)
+            # WB bounce: monitor wall absorption — exit early if wall is being eaten
+            # BEFORE checking SL so we flip to breakout instead of stopping out
+            if (pos.setup_type == SetupType.WALL_BOUNCE
+                    and pos.signal.sub_setup == "bounce"):
+                early = self._check_wb_bounce_wall_absorbed(pos, snap)
+                if early:
+                    reason, exit_price = early
+                    p = self.close_position(pos.symbol, exit_price, reason)
+                    if p:
+                        closed.append((p, reason))
+                    continue
             # WB wall-gone guard: only for absorption — bounce SL is already tight behind wall
             if pos.setup_type == SetupType.WALL_BOUNCE and pos.signal.sub_setup == "absorption":
                 self._check_wb_wall_gone(pos, snap)
@@ -286,6 +297,38 @@ class PaperTrader:
         else:
             pos.best_price = min(pos.best_price, price) if pos.best_price else price
         pos.current_pnl = PaperTrader._calc_pnl(pos, price)
+
+    @staticmethod
+    def _check_wb_bounce_wall_absorbed(
+        pos: Position, snap: "MarketSnapshot",
+    ) -> tuple[str, float] | None:
+        """Early exit for WB bounce when the support/resistance wall is being eaten.
+
+        If the wall we bounced off is now ≥30% absorbed, our thesis (wall holds)
+        is invalidated.  Exit at market NOW — before price drills through SL —
+        so the bot can immediately re-enter in the breakout direction.
+
+        Returns (reason, exit_price) or None.
+        """
+        from data.indicators import wall_absorption_pct as _abs_pct
+        ENTRY_GAP = 0.0002  # mirrors BOUNCE_ENTRY_GAP
+        FLIP_THRESHOLD = 0.30  # 30% absorbed = thesis broken
+
+        if pos.direction == Direction.LONG:
+            wall_price = pos.entry_price / (1 + ENTRY_GAP)
+            side = "bid"
+        else:
+            wall_price = pos.entry_price / (1 - ENTRY_GAP)
+            side = "ask"
+
+        abs_frac = _abs_pct(snap.wall_history, wall_price, side, min_hist=10)
+        if abs_frac >= FLIP_THRESHOLD:
+            logger.warning(
+                f"[PAPER] WB bounce wall absorbed {abs_frac*100:.0f}% — early exit {pos.symbol} "
+                f"@ {snap.price:.6f} (flip signal: {side} wall @ {wall_price:.6f})",
+            )
+            return ("wall_absorbed", snap.price)
+        return None
 
     @staticmethod
     def _check_wb_wall_gone(pos: Position, snap: "MarketSnapshot") -> None:
