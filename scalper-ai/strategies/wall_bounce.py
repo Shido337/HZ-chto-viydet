@@ -46,7 +46,7 @@ BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
 MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
-MIN_WALL_USD: float     = 50_000  # wall must be worth ≥$50K — skip noise walls
+MIN_WALL_USD: float     = 20_000  # wall must be worth ≥$20K — skip noise walls
 
 
 class WallBounce(BaseStrategy):

@@ -181,3 +181,7 @@ Files: strategies/wall_bounce.py, core/paper_trader.py, core/signal_generator.py
 ## [2026-04-07 10:10 UTC]
 fix: WB min wall $50K USD filter — skip noise walls, add USD to diagnostics
 Files: strategies/wall_bounce.py, core/bot_engine.py
+
+## [2026-04-07 10:21 UTC]
+tune: WB MIN_WALL_USD 50K -> 20K — less restrictive while still filtering noise
+Files: strategies/wall_bounce.py
