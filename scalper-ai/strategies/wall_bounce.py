@@ -48,7 +48,7 @@ MAX_ABSORPTION_DIST_PCT: float = 0.020  # wall must be within 2.0% of price for 
 VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 BOUNCE_MAX_ABS_PCT: float = 0.25  # if wall already >25% absorbed → don't bounce, it's breaking
-SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
+SL_BUFFER_PCT: float    = 0.0025  # 0.25% buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
 MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
 

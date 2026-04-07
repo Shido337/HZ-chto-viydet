@@ -335,3 +335,7 @@ Files: core/signal_generator.py, core/paper_trader.py, core/bot_engine.py, data/
 ## [2026-04-07 18:18 UTC]
 fix: raise default tp_rr from 1.5 to 2.0
 Files: data/cache.py
+
+## [2026-04-07 18:35 UTC]
+fix: WB SL buffer 0.08pct to 0.25pct to survive wall touch
+Files: strategies/wall_bounce.py
