@@ -61,3 +61,7 @@ Files: strategies/wall_bounce.py, core/paper_trader.py
 ## [2026-04-07 00:11 UTC]
 fix: wall detection uses median-based threshold (not bucketed avg)
 Files: data/indicators.py, data/cache.py
+
+## [2026-04-07 00:17 UTC]
+fix: reset signal cooldown on position close and pending expiry
+Files: core/bot_engine.py

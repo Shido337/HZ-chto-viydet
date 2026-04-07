@@ -223,6 +223,8 @@ class BotEngine:
             for order in expired:
                 if self._on_pending_cancelled:
                     await self._on_pending_cancelled(order)
+                # Reset cooldown: expired order frees the symbol for other setups
+                self._signal_cooldown.pop(order.symbol, None)
 
         # Update existing positions (sync for PaperTrader, async for LiveTrader)
         result = self.trader.update_positions()
@@ -238,6 +240,8 @@ class BotEngine:
             await self._persist_trade(pos, reason)
             if self._on_trade_close:
                 await self._on_trade_close(pos, reason)
+            # Reset cooldown so another strategy can immediately re-enter
+            self._signal_cooldown.pop(pos.symbol, None)
 
         if self.risk.check_daily_limit():
             return
