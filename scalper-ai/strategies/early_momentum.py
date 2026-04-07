@@ -51,8 +51,22 @@ class EarlyMomentum(BaseStrategy):
                 return None
             return self._build_signal(snap, direction, ml_boost)
 
-        # Path 2: TRENDING regime — DISABLED (EM-TREND generates too many losers;
-        # WB bounce and CB retest are structurally better in trending).
+        # Path 2: TRENDING regime (ADX > TRENDING_ADX_MIN) — impulse momentum
+        # Strict filters: ADX>35, CVD USD>$2000, 2 consecutive candles in direction
+        if adx_val > TRENDING_ADX_MIN and snap.regime in (
+            MarketRegime.TRENDING_BULL, MarketRegime.TRENDING_BEAR,
+        ):
+            direction = self._check_trending_impulse(snap)
+            if direction is None:
+                return None
+            # Soft OB guard: reject if OB is strongly opposing our direction
+            ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
+            if direction == Direction.LONG and ob < 0.35:
+                return None  # sellers dominating too much for a LONG
+            if direction == Direction.SHORT and ob > 0.65:
+                return None  # buyers dominating too much for a SHORT
+            return self._build_signal(snap, direction, ml_boost, is_trending=True)
+
         return None
 
     # -- sub-checks ---------------------------------------------------------

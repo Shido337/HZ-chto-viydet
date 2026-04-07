@@ -149,3 +149,7 @@ Files: strategies/wall_bounce.py, strategies/early_momentum.py
 ## [2026-04-07 08:01 UTC]
 fix: recalculate TP when SL is capped — maintain strategy RR ratio
 Files: core/paper_trader.py
+
+## [2026-04-07 08:23 UTC]
+tune: re-enable EM-TREND strict, revert SL=0.8% + CVD exit 0.2% + WB original TP, keep TP recalc fix + progressive cooldown
+Files: strategies/early_momentum.py, core/paper_trader.py, strategies/wall_bounce.py
