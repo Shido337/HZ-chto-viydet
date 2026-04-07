@@ -392,8 +392,10 @@ class PaperTrader:
             return ("tp_hit", pos.tp_price)
         if not is_long and price <= pos.tp_price:
             return ("tp_hit", pos.tp_price)
-        # Stale exit: losing >0.5% after 4 min — cut deep losers early
-        if not in_profit and elapsed_min >= STALE_EXIT_MINUTES:
+        # Stale exit: losing >0.3% after 2 min — cut deep losers early (skip WB: SL is tight behind wall)
+        if (not in_profit
+                and elapsed_min >= STALE_EXIT_MINUTES
+                and pos.setup_type != SetupType.WALL_BOUNCE):
             loss_pct = abs(price - pos.entry_price) / pos.entry_price if pos.entry_price else 0
             if loss_pct >= STALE_EXIT_DRAWDOWN:
                 return ("stale_exit", price)

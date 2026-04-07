@@ -189,3 +189,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 10:25 UTC]
 perf: disable CB (-12.5%), raise score 0.55->0.65, stale 0.5%->0.3% @ 2min, hold EM/WB 4->3min
 Files: core/bot_engine.py, core/paper_trader.py
+
+## [2026-04-07 10:27 UTC]
+fix: skip stale_exit for WB — SL is tight behind wall, let it play out
+Files: core/paper_trader.py
