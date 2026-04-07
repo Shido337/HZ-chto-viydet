@@ -67,7 +67,7 @@ class AdaptiveParams:
     max_sl_atr: float = 2.0       # max SL = 2× ATR
     min_sl_atr: float = 0.5       # min SL = 0.5× ATR
     # TP ratios (adjusted by regime & performance)
-    tp_rr: float = 1.5            # risk:reward
+    tp_rr: float = 2.0            # risk:reward
     # Trailing (ATR-relative)
     trail_activation_atr: float = 0.5  # activate at 0.5× ATR profit
     trail_distance_atr: float = 0.3    # trail distance = 0.3× ATR

@@ -331,3 +331,7 @@ Files: core/bot_engine.py
 ## [2026-04-07 16:40 UTC]
 feat: store entry market state in trades DB (cvd, adx, ob, regime)
 Files: core/signal_generator.py, core/paper_trader.py, core/bot_engine.py, data/models.py
+
+## [2026-04-07 18:18 UTC]
+fix: raise default tp_rr from 1.5 to 2.0
+Files: data/cache.py
