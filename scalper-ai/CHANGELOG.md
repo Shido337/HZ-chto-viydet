@@ -311,3 +311,7 @@ Files: strategies/wall_bounce.py, core/paper_trader.py, core/bot_engine.py
 ## [2026-04-07 15:03 UTC]
 fix: bounce sl_hit also triggers reversal signal (same as wall_absorbed), CVD-gated
 Files: core/bot_engine.py
+
+## [2026-04-07 15:12 UTC]
+fix: wall-gone cancelled orders get 15s cooldown, not instant retry
+Files: core/bot_engine.py, core/paper_trader.py

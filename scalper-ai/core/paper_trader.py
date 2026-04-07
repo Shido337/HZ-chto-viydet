@@ -166,10 +166,16 @@ class PaperTrader:
 
     # -- pending fills ------------------------------------------------------
 
-    def check_pending(self) -> tuple[list[Position], list[PendingOrder]]:
-        """Check pending limit orders for fills and expiry."""
+    def check_pending(self) -> tuple[list[Position], list[PendingOrder], list[PendingOrder]]:
+        """Check pending limit orders for fills and expiry.
+
+        Returns (filled, expired_timeout, wall_cancelled).
+        expired_timeout: order timed out normally → ok to retry immediately.
+        wall_cancelled: wall disappeared mid-wait → apply cooldown before retry.
+        """
         filled: list[Position] = []
         expired: list[PendingOrder] = []
+        wall_cancelled: list[PendingOrder] = []
         now = time.time()
 
         for symbol in list(self.pending):
@@ -231,13 +237,13 @@ class PaperTrader:
                         wall_still_there = True
                 if not wall_still_there:
                     del self.pending[symbol]
-                    expired.append(order)
+                    wall_cancelled.append(order)
                     logger.info(
-                        f"[PAPER] Limit CANCELLED {symbol} — wall gone "
+                        f"[PAPER] Limit CANCELLED {symbol} \u2014 wall gone "
                         f"(was {order.direction.value} @ {order.entry_price:.6f})",
                     )
 
-        return filled, expired
+        return filled, expired, wall_cancelled
 
     # -- close --------------------------------------------------------------
 

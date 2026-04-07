@@ -215,7 +215,7 @@ class BotEngine:
 
         # Check pending limit orders (PaperTrader only)
         if hasattr(self.trader, "check_pending"):
-            filled, expired = self.trader.check_pending()
+            filled, expired, wall_cancelled = self.trader.check_pending()
             for pos in filled:
                 if self._on_pending_cancelled:
                     await self._on_pending_cancelled(pos)
@@ -224,8 +224,13 @@ class BotEngine:
             for order in expired:
                 if self._on_pending_cancelled:
                     await self._on_pending_cancelled(order)
-                # Reset cooldown: expired order frees the symbol for other setups
+                # Timeout expiry: reset cooldown so other setups can try
                 self._signal_cooldown.pop(order.symbol, None)
+            for order in wall_cancelled:
+                if self._on_pending_cancelled:
+                    await self._on_pending_cancelled(order)
+                # Wall-gone: apply 15s cooldown — wall mightreappear, don't spam signals
+                self._signal_cooldown[order.symbol] = now
 
         # Update existing positions (sync for PaperTrader, async for LiveTrader)
         result = self.trader.update_positions()
