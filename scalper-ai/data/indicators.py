@@ -334,7 +334,7 @@ def wall_is_spoof(
 
 def find_wall(
     levels: tuple | list,
-    multiplier: float = 8.0,
+    multiplier: float = 5.0,
     mid_price: float = 0.0,
     max_dist_pct: float = 0.02,
     bucket_pct: float = BUCKET_PCT,

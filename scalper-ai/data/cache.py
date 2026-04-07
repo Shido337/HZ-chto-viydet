@@ -22,7 +22,7 @@ class MarketRegime(str, Enum):
     HIGH_VOL = "HIGH_VOL"
 
 
-WALL_MULTIPLIER = 8.0  # a level is a "wall" when its qty >= 8x median — must dominate the book
+WALL_MULTIPLIER = 5.0  # a level is a "wall" when its qty >= 5x median — must dominate the book
 
 
 @dataclass(frozen=True)
