@@ -121,3 +121,7 @@ Files: core/bot_engine.py
 ## [2026-04-07 03:34 UTC]
 tune: CVD impulse 00 USD floor for EM-TREND to filter weak momentum
 Files: strategies/early_momentum.py
+
+## [2026-04-07 04:26 UTC]
+tune: two-stage trailing - wider trail after 1x ATR profit for big runners
+Files: core/paper_trader.py

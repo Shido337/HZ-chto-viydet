@@ -284,7 +284,13 @@ class PaperTrader:
         atr_val = ap.atr_value
         if atr_val > 0:
             rr_trigger = atr_val * ap.trail_activation_atr
-            trail_distance = max(atr_val * ap.trail_distance_atr, pos.entry_price * MIN_TRAIL_PCT)
+            base_trail = max(atr_val * ap.trail_distance_atr, pos.entry_price * MIN_TRAIL_PCT)
+            # Two-stage trail: widen after 1× ATR profit to let big winners run
+            profit = abs(price - pos.entry_price)
+            if profit > atr_val:
+                trail_distance = base_trail * 1.5  # 50% wider trail for big movers
+            else:
+                trail_distance = base_trail
         else:
             risk = pos.original_risk or abs(pos.entry_price - pos.sl_price)
             rr_trigger = risk * TRAILING_ACTIVATION_RR
