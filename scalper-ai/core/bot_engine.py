@@ -331,7 +331,7 @@ class BotEngine:
         snap = self.cache.get_snapshot(pos.symbol)
         if snap.stale or not snap.price:
             return None
-        ap = self.cache.get_adaptive_params(pos.symbol)
+        ap = self.cache.adaptive_params.get(pos.symbol, AdaptiveParams())
         atr = ap.atr_value if ap.atr_value > 0 else snap.price * 0.003
 
         # Wall price ≈ bounce entry price (limit was placed just inside the wall)

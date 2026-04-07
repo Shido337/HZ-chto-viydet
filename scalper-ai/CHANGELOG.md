@@ -315,3 +315,7 @@ Files: core/bot_engine.py
 ## [2026-04-07 15:12 UTC]
 fix: wall-gone cancelled orders get 15s cooldown, not instant retry
 Files: core/bot_engine.py, core/paper_trader.py
+
+## [2026-04-07 15:36 UTC]
+fix: cache.adaptive_params.get() instead of nonexistent get_adaptive_params()
+Files: core/bot_engine.py
