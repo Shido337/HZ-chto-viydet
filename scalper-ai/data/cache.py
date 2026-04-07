@@ -22,7 +22,7 @@ class MarketRegime(str, Enum):
     HIGH_VOL = "HIGH_VOL"
 
 
-WALL_MULTIPLIER = 5.0  # a level is a "wall" when its qty >= 5x average of all 20 levels
+WALL_MULTIPLIER = 8.0  # a level is a "wall" when its qty >= 8x median — must dominate the book
 
 
 @dataclass(frozen=True)
@@ -283,7 +283,8 @@ class MarketCache:
         levels: list[tuple[float, float]],
         mult: float = WALL_MULTIPLIER,
         mid_price: float = 0.0,
-        max_dist_pct: float = 0.03,
+        max_dist_pct: float = 0.02,
+        max_wall_ticks: int = 5,
     ) -> tuple[float, float]:
         """Returns (wall_price, wall_qty) or (0.0, 0.0) if no wall detected."""
         if mid_price > 0:
@@ -298,13 +299,16 @@ class MarketCache:
         median_qty = sorted_qtys[len(sorted_qtys) // 2]
         if median_qty <= 0:
             return 0.0, 0.0
-        avg = median_qty  # reuse variable name; threshold = avg * mult = median * mult
-        levels = bucket_levels([lv for lv in raw if lv[1] >= avg * mult], BUCKET_PCT)
+        threshold = median_qty * mult
+        wall_ticks = [lv for lv in raw if lv[1] >= threshold]
+        if not wall_ticks or len(wall_ticks) > max_wall_ticks:
+            return 0.0, 0.0
+        levels = bucket_levels(wall_ticks, BUCKET_PCT)
         if not levels:
             return 0.0, 0.0
         best_p, best_q = 0.0, 0.0
         for p, q in levels:
-            if q >= avg * mult and q > best_q:
+            if q > best_q:
                 best_p, best_q = p, q
         return best_p, best_q
 

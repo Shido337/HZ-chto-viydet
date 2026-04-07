@@ -334,21 +334,23 @@ def wall_is_spoof(
 
 def find_wall(
     levels: tuple | list,
-    multiplier: float = 5.0,
+    multiplier: float = 8.0,
     mid_price: float = 0.0,
-    max_dist_pct: float = 0.03,
+    max_dist_pct: float = 0.02,
     bucket_pct: float = BUCKET_PCT,
+    max_wall_ticks: int = 5,
 ) -> tuple[float, float] | None:
     """Detect dominant order wall in a sequence of (price, qty) depth levels.
 
     Uses median-based threshold on raw ticks so a concentrated wall level
     (e.g. 369K vs ~15K neighbours) is not diluted by bucketing.
     Algorithm:
-      1. Filter ticks to price window.
+      1. Filter ticks to price window (2% from mid).
       2. Compute median tick qty as robust baseline.
-      3. Keep only ticks where qty >= median * multiplier.
-      4. Aggregate adjacent wall ticks into log-scale buckets.
-      5. Return the heaviest bucket.
+      3. Keep only ticks where qty >= median * 8 (strong dominance).
+      4. Reject if too many ticks qualify (thick book, not a wall).
+      5. Aggregate adjacent wall ticks into log-scale buckets.
+      6. Return the heaviest bucket.
     """
     if mid_price > 0:
         lo = mid_price * (1.0 - max_dist_pct)
@@ -365,6 +367,9 @@ def find_wall(
     # Keep only dominant ticks (potential wall ticks)
     wall_ticks = [(p, q) for p, q in raw if q >= threshold]
     if not wall_ticks:
+        return None
+    # Concentration check: a real wall is 1-5 ticks, not a thick book
+    if len(wall_ticks) > max_wall_ticks:
         return None
     # Aggregate nearby wall ticks into buckets (wall spread across 2-3 adjacent ticks)
     aggregated = bucket_levels(wall_ticks, bucket_pct)
