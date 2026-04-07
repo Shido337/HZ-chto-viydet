@@ -23,6 +23,7 @@ in qty as price approaches (qty drops ≥25 %) are blocked.
 from __future__ import annotations
 
 from data.cache import MarketRegime, MarketSnapshot
+from data.constants import GLOBAL_MAX_SL_PCT, WB_ABSORPTION_THRESHOLD
 from data.indicators import (
     find_wall,
     order_book_imbalance,
@@ -41,7 +42,7 @@ from strategies.base_strategy import BaseStrategy
 BOUNCE_DIST_PCT: float  = 0.003   # price within 0.5% of wall — tighter = better edge, smaller SL
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
 BOUNCE_MIN_SCORE: float = 0.60    # lower threshold — wall quality IS the signal, not CVD/OB
-ABSORPTION_PCT: float   = 0.50    # ≥50 % wall qty absorbed = active absorption (30% too early — wall still 70% alive)
+ABSORPTION_PCT: float   = WB_ABSORPTION_THRESHOLD  # from data/constants.py
 MIN_CVD_BUILD: float    = 50.0    # minimum |CVD delta 20s| for absorption
 WALL_MIN_SECS: float       = 10.0     # wall must be present ≥5 s (spoof filter)
 MAX_ABSORPTION_DIST_PCT: float = 0.020  # wall must be within 2.0% of price for absorption
@@ -49,7 +50,7 @@ VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
 BOUNCE_MAX_ABS_PCT: float = 0.25  # if wall already >25% absorbed → don't bounce, it's breaking
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
-MAX_SL_PCT: float       = 0.008   # hard cap: 0.8% max risk — matches GLOBAL_MAX_SL_PCT in paper_trader
+MAX_SL_PCT: float       = GLOBAL_MAX_SL_PCT  # from data/constants.py — 0.8% hard cap
 MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
 
 

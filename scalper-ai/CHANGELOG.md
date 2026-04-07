@@ -367,3 +367,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 23:21 UTC]
 fix: inconsistencies audit - WB MAX_SL 1%->0.8%, remove HIGH_VOL block bounce, docstring 30%->50%, cache min_score 0.55->0.65
 Files: strategies/wall_bounce.py, data/cache.py
+
+## [2026-04-07 23:28 UTC]
+refactor: centralize shared constants in data/constants.py, fix paper/live divergence
+Files: data/constants.py, core/paper_trader.py, core/live_trader.py, strategies/wall_bounce.py, strategies/continuation_break.py

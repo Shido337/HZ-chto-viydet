@@ -7,6 +7,22 @@ from loguru import logger
 
 from core.signal_generator import Direction, Position, Signal
 from data.cache import MarketCache
+from data.constants import (
+    BREAKEVEN_TRIGGER_RR,
+    CVD_EXIT_MIN_ATR_MULT,
+    CVD_EXIT_MIN_HOLD_SEC,
+    CVD_EXIT_MIN_PNL_PCT,
+    LEVERAGE,
+    MAKER_FEE,
+    MAX_HOLD_CB,
+    MAX_HOLD_EM,
+    MAX_HOLD_MR,
+    MAX_HOLD_WB,
+    MIN_TRAIL_PCT,
+    TAKER_FEE,
+    TRAILING_ACTIVATION_RR,
+    TRAILING_RISK_FACTOR,
+)
 
 if TYPE_CHECKING:
     from data.cache import AdaptiveParams, MarketSnapshot
@@ -14,20 +30,8 @@ if TYPE_CHECKING:
     from exchange.order_executor import OrderExecutor
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants local to live_trader only
 # ---------------------------------------------------------------------------
-BREAKEVEN_TRIGGER_RR = 0.6    # fallback BE trigger if no ATR
-TRAILING_ACTIVATION_RR = 0.5  # fallback real trail activation
-TRAILING_RISK_FACTOR = 0.4    # fallback trail distance
-MIN_TRAIL_PCT = 0.0003        # 0.03% absolute minimum trail
-MAX_HOLD_MINUTES = 8
-MAX_HOLD_IF_PROFIT = 12
-LEVERAGE = 25
-CVD_EXIT_MIN_PNL_PCT = 0.003
-CVD_EXIT_MIN_ATR_MULT = 0.5
-CVD_EXIT_MIN_HOLD_SEC = 120
-MAKER_FEE = 0.0002
-TAKER_FEE = 0.0004
 # Binance callbackRate limits
 MIN_CALLBACK_RATE = 0.1  # 0.1%
 MAX_CALLBACK_RATE = 5.0  # 5.0%
@@ -526,9 +530,16 @@ class LiveTrader:
                     return "cvd_divergence"
                 if not is_long and snap.cvd_delta_1m > 0:
                     return "cvd_divergence"
-        # Time stop -- extend if profitable
-        max_hold = MAX_HOLD_IF_PROFIT if in_profit else MAX_HOLD_MINUTES
+        # Time stop — per-setup caps (mirrors paper_trader)
+        hold_caps = {
+            "CONTINUATION_BREAK": MAX_HOLD_CB,
+            "EARLY_MOMENTUM": MAX_HOLD_EM,
+            "WALL_BOUNCE": MAX_HOLD_WB,
+            "MEAN_REVERSION": MAX_HOLD_MR,
+        }
+        max_hold = hold_caps.get(pos.setup_type.value if hasattr(pos.setup_type, "value") else str(pos.setup_type), MAX_HOLD_MR)
         if elapsed_min >= max_hold:
+            return "time_stop"
             return "time_stop"
         return None
 

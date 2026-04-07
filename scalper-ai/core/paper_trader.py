@@ -7,36 +7,36 @@ from loguru import logger
 
 from core.signal_generator import Direction, PendingOrder, Position, SetupType, Signal
 from data.cache import AdaptiveParams, MarketCache
+from data.constants import (
+    BREAKEVEN_TRIGGER_RR,
+    CVD_EXIT_MIN_ATR_MULT,
+    CVD_EXIT_MIN_HOLD_SEC,
+    CVD_EXIT_MIN_PNL_PCT,
+    GLOBAL_MAX_SL_PCT,
+    LEVERAGE,
+    MAKER_FEE,
+    MAX_HOLD_CB,
+    MAX_HOLD_EM,
+    MAX_HOLD_MR,
+    MAX_HOLD_WB,
+    MIN_TRAIL_PCT,
+    TAKER_FEE,
+    TRAILING_ACTIVATION_RR,
+    TRAILING_RISK_FACTOR,
+    WB_ABSORPTION_THRESHOLD,
+)
 from data.indicators import find_wall, wall_stable
 
 if TYPE_CHECKING:
     from data.cache import MarketSnapshot
 
 # ---------------------------------------------------------------------------
-# Constants (fallbacks — adaptive params override when available)
+# Constants local to paper_trader only
 # ---------------------------------------------------------------------------
-TRAILING_ACTIVATION_RR = 0.5  # fallback: activate trailing at 0.5× risk
-TRAILING_RISK_FACTOR = 0.4    # fallback: trail distance = 40% of original risk
-MIN_TRAIL_PCT = 0.0003        # absolute min trail = 0.03% of price
-BREAKEVEN_TRIGGER_RR = 0.6    # fallback: BE at 0.6× risk
-MAX_HOLD_MINUTES = 6          # default hard cap for losing trades that aren't moving
-# Per-setup hold caps: CB needs time to consolidate at retest before continuation
-MAX_HOLD_CB = 15              # CB retest can consolidate 10-15 min before breakout
-MAX_HOLD_EM = 3               # EM is momentum — fire fast or bail
-MAX_HOLD_MR = 6               # MR sweep fade — medium window
-MAX_HOLD_WB = 3               # WB wall edge is short-lived — exit fast
 STALE_EXIT_MINUTES = 2        # early exit for losers in drawdown
 STALE_EXIT_DRAWDOWN = 0.003   # 0.3% unrealized loss threshold for stale exit
-LEVERAGE = 25
-CVD_EXIT_MIN_PNL_PCT = 0.002  # 0.2% min profit for CVD exit
-CVD_EXIT_MIN_ATR_MULT = 0.3   # OR 0.3× ATR profit for CVD exit (was 0.5)
-CVD_EXIT_MIN_HOLD_SEC = 60    # hold at least 1 min before CVD exit (was 2 min)
-# Binance futures fees: maker 0.02%, taker 0.04%
-MAKER_FEE = 0.0002  # limit orders (entry, TP)
-TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
-PENDING_TIMEOUT = 60   # seconds — default for CB / MR
-PENDING_TIMEOUT_WB = 180  # WB walls can be 1-2% away; need more time to fill
-GLOBAL_MAX_SL_PCT = 0.008  # 0.8% max SL distance for any trade
+PENDING_TIMEOUT = 60          # seconds — default for CB / MR
+PENDING_TIMEOUT_WB = 180      # WB walls can be 1-2% away; need more time to fill
 
 
 class PaperTrader:
@@ -339,7 +339,7 @@ class PaperTrader:
         """
         from data.indicators import wall_absorption_pct as _abs_pct
         ENTRY_GAP = 0.0002  # mirrors BOUNCE_ENTRY_GAP
-        FLIP_THRESHOLD = 0.50  # 50% absorbed = thesis broken (mirrors ABSORPTION_PCT in wall_bounce.py)
+        FLIP_THRESHOLD = WB_ABSORPTION_THRESHOLD  # imported from data/constants.py
 
         if pos.direction == Direction.LONG:
             wall_price = pos.entry_price / (1 + ENTRY_GAP)

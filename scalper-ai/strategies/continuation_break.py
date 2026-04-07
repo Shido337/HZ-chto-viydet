@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from data.cache import MarketRegime, MarketSnapshot
+from data.constants import GLOBAL_MAX_SL_PCT
 from data.indicators import (
     detect_swing_high,
     detect_swing_low,
@@ -23,7 +24,7 @@ RETEST_PROXIMITY_PCT = 0.025   # price within 2.5% of level = retest zone
 RETEST_OVERSHOOT_PCT = 0.005   # allow up to 0.5% past level (wick through OK)
 SL_BUFFER_PCT = 0.0005         # 0.05% buffer beyond structural SL
 MIN_RR = 1.0                   # minimum 1.0:1 — trailing adds upside
-MAX_SL_PCT = 0.008             # 0.8% hard cap: kills catastrophic swing-to-swing SLs
+MAX_SL_PCT = GLOBAL_MAX_SL_PCT  # from data/constants.py — 0.8% hard cap
 # Adaptive entry constants come from snap.adaptive:
 #   cb_adx_max, ob_min, volume_spike_min, min_score, tp_rr,
 #   max_sl_atr, min_sl_atr, atr_value
