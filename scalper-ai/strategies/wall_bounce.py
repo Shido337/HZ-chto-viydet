@@ -184,11 +184,8 @@ class WallBounce(BaseStrategy):
                     if snap.regime == MarketRegime.HIGH_VOL:
                         return None
                     # If CVD is positive (buyers pushing price UP, away from wall) → market entry now.
-                    # If CVD is strongly negative (sellers dominant) → wall likely to break, skip.
-                    # Only place limit when CVD is mildly negative or neutral.
+                    # Otherwise → limit just above wall, wait for price to touch.
                     going_away = snap.cvd_delta_20s > 0
-                    if not going_away and snap.cvd_delta_20s < -MIN_CVD_BUILD:
-                        return None  # sellers too strong — bid wall will likely break
                     if going_away:
                         entry = snap.price
                     else:
@@ -222,11 +219,8 @@ class WallBounce(BaseStrategy):
                     if snap.regime == MarketRegime.HIGH_VOL:
                         return None
                     # If CVD is negative (sellers pushing price DOWN, away from wall) → market entry now.
-                    # If CVD is strongly positive (buyers dominant) → wall likely to break, skip.
-                    # Only place limit when CVD is mildly positive or neutral.
+                    # Otherwise → limit just below wall, wait for price to touch.
                     going_away = snap.cvd_delta_20s < 0
-                    if not going_away and snap.cvd_delta_20s > MIN_CVD_BUILD:
-                        return None  # buyers too strong — ask wall will likely break
                     if going_away:
                         entry = snap.price
                     else:

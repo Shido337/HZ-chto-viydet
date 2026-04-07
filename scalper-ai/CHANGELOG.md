@@ -355,3 +355,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 23:04 UTC]
 fix: WB entry - block limit when CVD opposes, raise absorption to 50%, block HIGH_VOL
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 23:11 UTC]
+revert: remove CVD filter for bounce_limit (CVD at placement != CVD at fill)
+Files: strategies/wall_bounce.py
