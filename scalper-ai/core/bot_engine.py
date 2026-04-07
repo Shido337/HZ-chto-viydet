@@ -246,18 +246,29 @@ class BotEngine:
                 self._signal_cooldown.pop(pos.symbol, None)
                 self._consecutive_losses.pop(pos.symbol, None)
             else:
-                # Loss: progressive cooldown based on consecutive losses
-                losses = self._consecutive_losses.get(pos.symbol, 0) + 1
-                self._consecutive_losses[pos.symbol] = losses
-                if losses >= 3:
-                    # 3+ losses: 10 min cooldown (likely hostile regime for this coin)
-                    self._signal_cooldown[pos.symbol] = now + 585
-                elif losses >= 2:
-                    # 2 losses: 5 min cooldown
-                    self._signal_cooldown[pos.symbol] = now + 285
+                # WB bounce SL: wall broke → absorption/breakout may fire immediately.
+                # Use a tiny cooldown (3s) so the next tick can enter in breakout direction.
+                is_wb_bounce_sl = (
+                    pos.setup_type == SetupType.WALL_BOUNCE
+                    and getattr(pos.signal, "sub_setup", "") == "bounce"
+                    and reason == "sl_hit"
+                )
+                if is_wb_bounce_sl:
+                    self._signal_cooldown[pos.symbol] = now + 3
+                    # Don't increment loss counter — wall break is structural, not a bad signal
                 else:
-                    # 1st loss: 2 min cooldown
-                    self._signal_cooldown[pos.symbol] = now + 105
+                    # Loss: progressive cooldown based on consecutive losses
+                    losses = self._consecutive_losses.get(pos.symbol, 0) + 1
+                    self._consecutive_losses[pos.symbol] = losses
+                    if losses >= 3:
+                        # 3+ losses: 10 min cooldown (likely hostile regime for this coin)
+                        self._signal_cooldown[pos.symbol] = now + 585
+                    elif losses >= 2:
+                        # 2 losses: 5 min cooldown
+                        self._signal_cooldown[pos.symbol] = now + 285
+                    else:
+                        # 1st loss: 2 min cooldown
+                        self._signal_cooldown[pos.symbol] = now + 105
 
         if self.risk.check_daily_limit():
             return

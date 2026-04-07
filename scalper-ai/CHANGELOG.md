@@ -225,3 +225,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 12:57 UTC]
 tune: BOUNCE_MAX_ABS_PCT 5pct->25pct
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 12:59 UTC]
+feat: WB bounce SL -> 3s cooldown for instant absorption re-entry on wall break, no loss counter increment
+Files: core/bot_engine.py
