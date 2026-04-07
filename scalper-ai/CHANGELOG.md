@@ -343,3 +343,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 18:54 UTC]
 fix: WB SL not triggered while wall still alive in book
 Files: core/paper_trader.py
+
+## [2026-04-07 20:12 UTC]
+fix: revert tp_rr to 1.5 (was 2.0)
+Files: data/cache.py
