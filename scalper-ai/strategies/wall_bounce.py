@@ -6,7 +6,10 @@ Two sub-setups, mutually exclusive (absorption tried first):
              Entry: limit order just in front of the wall (maker / GTX).
              Thesis: wall holds → price reverses.
              Filters: spoof detection + wall stable ≥5 s + ≥1 level touch
-                      + VEI < 1.5 + CVD not opposing + OB aligned.
+                      + VEI < 1.5.
+             NOTE: CVD/OB are NOT required — bounce momentum starts FROM
+             the wall, not before it. Score is based on wall quality:
+             proximity (closer = better) + level touches + wall age.
 
   ABSORPTION Wall is actively being eaten (≥30 % absorbed in last 30 s).
              Entry: market order — window is narrow, wall won't last.
@@ -35,8 +38,9 @@ from strategies.base_strategy import BaseStrategy
 # ---------------------------------------------------------------------------
 # Strategy constants
 # ---------------------------------------------------------------------------
-BOUNCE_DIST_PCT: float  = 0.012   # price within 1.2 % of wall (was 0.3%)
+BOUNCE_DIST_PCT: float  = 0.012   # price within 1.2 % of wall
 BOUNCE_ENTRY_GAP: float = 0.0002  # limit placed 0.02 % in front of wall
+BOUNCE_MIN_SCORE: float = 0.60    # lower threshold — wall quality IS the signal, not CVD/OB
 ABSORPTION_PCT: float   = 0.30    # ≥30 % wall qty absorbed = active absorption
 MIN_CVD_BUILD: float    = 50.0    # minimum |CVD delta 20s| for absorption
 WALL_MIN_SECS: float       = 5.0     # wall must be present ≥5 s (spoof filter)
@@ -150,10 +154,9 @@ class WallBounce(BaseStrategy):
         ap,
         ml_boost: float,
     ) -> Signal | None:
-        ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
         klines = list(snap.klines_1m)
 
-        # VEI filter applies to the entire bounce setup — skip if volatility expanding
+        # VEI filter: if volatility strongly expanding, wall likely to break
         if vei(klines) > VEI_MAX_BOUNCE:
             return None
 
@@ -162,20 +165,20 @@ class WallBounce(BaseStrategy):
             wp, wq = bid_wall
             dist = (snap.price - wp) / wp if wp else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
+                touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "bid")
-                        and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
-                        and snap.cvd_delta_20s >= 0
-                        and ob >= 0.48):
-                    entry = wp * (1 + BOUNCE_ENTRY_GAP)  # limit just above wall (maker)
-                    sl = wp * (1 - SL_BUFFER_PCT)  # SL strictly behind wall — thesis = wall holds
+                        and touches >= BOUNCE_MIN_TOUCHES):
+                    # CVD/OB not required — bounce momentum starts FROM the wall, not before
+                    entry = wp * (1 + BOUNCE_ENTRY_GAP)
+                    sl = wp * (1 - SL_BUFFER_PCT)
                     sl_dist = (entry - sl) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None
                     tp = entry + (entry - sl) * ap.tp_rr
-                    return self._build(
+                    return self._build_bounce(
                         snap, Direction.LONG, entry, sl, tp,
-                        ob, 0.0, "bounce", ap, ml_boost, wq,
+                        wp, dist, touches, ap, ml_boost,
                     )
 
         # SHORT: large ask wall above, price approaching from below → limit entry below wall
@@ -183,27 +186,88 @@ class WallBounce(BaseStrategy):
             wp, wq = ask_wall
             dist = (wp - snap.price) / snap.price if snap.price else 1.0
             if 0 < dist <= BOUNCE_DIST_PCT:
+                touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
                         and not wall_is_spoof(snap.wall_history, wp, "ask")
-                        and count_level_touches(klines, wp) >= BOUNCE_MIN_TOUCHES
-                        and snap.cvd_delta_20s <= 0
-                        and ob <= 0.52):
-                    entry = wp * (1 - BOUNCE_ENTRY_GAP)  # limit just below wall (maker)
-                    sl = wp * (1 + SL_BUFFER_PCT)  # SL strictly behind wall — thesis = wall holds
+                        and touches >= BOUNCE_MIN_TOUCHES):
+                    # CVD/OB not required — bounce momentum starts FROM the wall, not before
+                    entry = wp * (1 - BOUNCE_ENTRY_GAP)
+                    sl = wp * (1 + SL_BUFFER_PCT)
                     sl_dist = (sl - entry) / entry
                     if sl_dist <= 0 or sl_dist > MAX_SL_PCT:
                         return None
                     tp = entry - (sl - entry) * ap.tp_rr
-                    return self._build(
+                    return self._build_bounce(
                         snap, Direction.SHORT, entry, sl, tp,
-                        ob, 0.0, "bounce", ap, ml_boost, wq,
+                        wp, dist, touches, ap, ml_boost,
                     )
 
         return None
 
     # -----------------------------------------------------------------------
-    # Signal builder
+    # Signal builders
     # -----------------------------------------------------------------------
+
+    def _build_bounce(
+        self,
+        snap: MarketSnapshot,
+        d: Direction,
+        entry: float,
+        sl: float,
+        tp: float,
+        wall_price: float,
+        dist: float,
+        touches: int,
+        ap,
+        ml_boost: float,
+    ) -> Signal | None:
+        """Score bounce by wall quality: proximity + level age + touches.
+
+        CVD/OB deliberately excluded — bounce momentum begins AT the wall,
+        not before it.  By the time CVD aligns, the entry window has closed.
+        """
+        if entry <= 0 or sl <= 0 or tp <= 0:
+            return None
+        sl_dist = abs(entry - sl) / entry
+        if sl_dist > MAX_SL_PCT:
+            return None
+        if d == Direction.LONG and tp <= entry:
+            return None
+        if d == Direction.SHORT and tp >= entry:
+            return None
+        if abs(tp - entry) / abs(entry - sl) < MIN_RR:
+            return None
+
+        # Proximity: closer to wall = higher conviction we're at the bounce point
+        prox = max(0.0, (BOUNCE_DIST_PCT - dist) / BOUNCE_DIST_PCT)
+
+        # Wall longevity bonus: 15 s+ = survived multiple depth updates, not a spoof
+        side = "bid" if d == Direction.LONG else "ask"
+        long_stable = wall_stable(snap.wall_history, wall_price, side, 15.0)
+
+        comp = ScoreComponents(
+            cvd_alignment       = prox * 0.25,                         # 0–0.25: proximity to wall
+            ob_imbalance        = min(touches / 2.0, 1.0) * 0.20,     # 0–0.20: tested level
+            volume_confirmation = 0.15,                                 # stable wall confirmed (required)
+            structure_quality   = 0.13 if long_stable else 0.08,       # 0.08–0.13: wall longevity
+            regime_match        = 0.15,                                 # bounce valid in all regimes
+            ml_boost            = min(ml_boost * 0.10, 0.10),
+        )
+        score = self.score_components(comp)
+        if score < BOUNCE_MIN_SCORE:
+            return None
+
+        return Signal(
+            symbol=snap.symbol,
+            direction=d,
+            setup_type=SetupType.WALL_BOUNCE,
+            score=score,
+            components=comp,
+            entry_price=entry,
+            sl_price=sl,
+            tp_price=tp,
+            sub_setup="bounce",
+        )
 
     def _build(
         self,

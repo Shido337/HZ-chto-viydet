@@ -205,3 +205,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 11:14 UTC]
 tune: wall multiplier 8x->5x — 8x caused instant wall-gone cancels, keep 2% dist + concentration check
 Files: data/indicators.py, data/cache.py
+
+## [2026-04-07 11:30 UTC]
+fix: bounce scoring rework — remove CVD/OB filters, score by wall proximity+touches+age. Bounce momentum starts AT wall not before.
+Files: strategies/wall_bounce.py
