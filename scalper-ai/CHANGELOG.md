@@ -295,3 +295,7 @@ Files: core/bot_engine.py, core/paper_trader.py
 ## [2026-04-07 14:10 UTC]
 fix: EM cvd_buildup validates real CVD sign; trending path blocks opposite 1m CVD
 Files: strategies/early_momentum.py
+
+## [2026-04-07 14:20 UTC]
+fix: bounce market fill instead of limit — price never drops to limit when trending
+Files: strategies/wall_bounce.py, core/paper_trader.py

@@ -68,7 +68,10 @@ class PaperTrader:
             return None
 
         snap = self.cache.get_snapshot(signal.symbol)
-        is_market = signal.setup_type == SetupType.EARLY_MOMENTUM  # WB uses limits (bounce+absorption)
+        is_market = (
+            signal.setup_type == SetupType.EARLY_MOMENTUM
+            or (signal.setup_type == SetupType.WALL_BOUNCE and signal.sub_setup == "bounce")
+        )  # WB bounce: market fill — we're already at the wall, limit never fills if price trends away
 
         if is_market:
             # Market entry: LONG at ask, SHORT at bid (taker)
