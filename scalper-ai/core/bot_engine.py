@@ -240,8 +240,12 @@ class BotEngine:
             await self._persist_trade(pos, reason)
             if self._on_trade_close:
                 await self._on_trade_close(pos, reason)
-            # Reset cooldown so another strategy can immediately re-enter
-            self._signal_cooldown.pop(pos.symbol, None)
+            if won:
+                # Win: reset cooldown so we can re-enter quickly in a trending market
+                self._signal_cooldown.pop(pos.symbol, None)
+            else:
+                # Loss: extend cooldown to 120s to prevent immediate re-entry streaks
+                self._signal_cooldown[pos.symbol] = now + 105  # +105 so check (now - ts < 15) waits ~120s
 
         if self.risk.check_daily_limit():
             return

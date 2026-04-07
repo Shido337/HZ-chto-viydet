@@ -113,3 +113,7 @@ Files: strategies/early_momentum.py
 ## [2026-04-07 02:24 UTC]
 tune: faster CVD exit (60s hold, 0.2pct min), EM hold 4min
 Files: core/paper_trader.py
+
+## [2026-04-07 02:56 UTC]
+fix: 120s loss cooldown to prevent consecutive SL hit streaks on same symbol
+Files: core/bot_engine.py
