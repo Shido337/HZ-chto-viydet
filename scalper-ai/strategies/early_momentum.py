@@ -5,6 +5,7 @@ from data.indicators import (
     atr_percentile as calc_atr_pct,
     detect_swing_high,
     detect_swing_low,
+    find_wall,
     order_book_imbalance,
 )
 from core.signal_generator import Direction, ScoreComponents, SetupType, Signal
@@ -65,6 +66,21 @@ class EarlyMomentum(BaseStrategy):
                 return None  # sellers dominating too much for a LONG
             if direction == Direction.SHORT and ob > 0.65:
                 return None  # buyers dominating too much for a SHORT
+            # Wall guard: don't trade INTO a wall (e.g. don't SHORT into bid support)
+            if direction == Direction.SHORT:
+                bid_wall = find_wall(snap.depth_bids, mid_price=snap.price)
+                if bid_wall:
+                    wp, _ = bid_wall
+                    wall_dist = (snap.price - wp) / snap.price if snap.price else 1.0
+                    if 0 < wall_dist < 0.015:  # wall within 1.5% below = support
+                        return None
+            elif direction == Direction.LONG:
+                ask_wall = find_wall(snap.depth_asks, mid_price=snap.price)
+                if ask_wall:
+                    wp, _ = ask_wall
+                    wall_dist = (wp - snap.price) / snap.price if snap.price else 1.0
+                    if 0 < wall_dist < 0.015:  # wall within 1.5% above = resistance
+                        return None
             return self._build_signal(snap, direction, ml_boost, is_trending=True)
 
         return None

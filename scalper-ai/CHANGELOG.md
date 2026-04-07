@@ -157,3 +157,7 @@ Files: strategies/early_momentum.py, core/paper_trader.py, strategies/wall_bounc
 ## [2026-04-07 09:22 UTC]
 feat: spoof wall detection — flickering + qty-fade-on-approach filter, replaces round_number check
 Files: data/indicators.py, data/cache.py, strategies/wall_bounce.py, core/bot_engine.py
+
+## [2026-04-07 09:46 UTC]
+fix: EM-TREND wall guard — block SHORT into bid support, LONG into ask resistance within 1.5%
+Files: strategies/early_momentum.py
