@@ -92,6 +92,7 @@ class BotEngine:
         self._on_pending_cancelled: Any = None
         self.signals: list[Signal] = []
         self._signal_cooldown: dict[str, float] = {}  # symbol → last signal time
+        self._consecutive_losses: dict[str, int] = {}  # symbol → consecutive loss count
         self._last_screen_time = 0.0
         self._testnet = False
         self.started_at: str = ""
@@ -241,11 +242,22 @@ class BotEngine:
             if self._on_trade_close:
                 await self._on_trade_close(pos, reason)
             if won:
-                # Win: reset cooldown so we can re-enter quickly in a trending market
+                # Win: reset cooldown and loss counter
                 self._signal_cooldown.pop(pos.symbol, None)
+                self._consecutive_losses.pop(pos.symbol, None)
             else:
-                # Loss: extend cooldown to 120s to prevent immediate re-entry streaks
-                self._signal_cooldown[pos.symbol] = now + 105  # +105 so check (now - ts < 15) waits ~120s
+                # Loss: progressive cooldown based on consecutive losses
+                losses = self._consecutive_losses.get(pos.symbol, 0) + 1
+                self._consecutive_losses[pos.symbol] = losses
+                if losses >= 3:
+                    # 3+ losses: 10 min cooldown (likely hostile regime for this coin)
+                    self._signal_cooldown[pos.symbol] = now + 585
+                elif losses >= 2:
+                    # 2 losses: 5 min cooldown
+                    self._signal_cooldown[pos.symbol] = now + 285
+                else:
+                    # 1st loss: 2 min cooldown
+                    self._signal_cooldown[pos.symbol] = now + 105
 
         if self.risk.check_daily_limit():
             return

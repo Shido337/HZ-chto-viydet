@@ -137,3 +137,7 @@ Files: strategies/early_momentum.py
 ## [2026-04-07 06:53 UTC]
 tune: tighter SL cap 0.5% + higher CVD exit min 0.4% — fix loss/win ratio
 Files: core/paper_trader.py
+
+## [2026-04-07 07:25 UTC]
+fix: progressive cooldown — 2min/5min/10min after 1/2/3 consecutive losses per coin
+Files: core/bot_engine.py
