@@ -363,3 +363,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 23:18 UTC]
 fix: WB FLIP_THRESHOLD 30%->50% to match ABSORPTION_PCT entry threshold
 Files: core/paper_trader.py
+
+## [2026-04-07 23:21 UTC]
+fix: inconsistencies audit - WB MAX_SL 1%->0.8%, remove HIGH_VOL block bounce, docstring 30%->50%, cache min_score 0.55->0.65
+Files: strategies/wall_bounce.py, data/cache.py
