@@ -85,3 +85,7 @@ Files: core/signal_generator.py, strategies/early_momentum.py, strategies/contin
 ## [2026-04-07 01:04 UTC]
 fix: EM trending path only needs regime+CVD (remove OB and trend_alignment checks)
 Files: strategies/early_momentum.py
+
+## [2026-04-07 01:11 UTC]
+fix: EM trending uses cvd_20s for scoring, WB pending timeout 180s
+Files: strategies/early_momentum.py, core/paper_trader.py

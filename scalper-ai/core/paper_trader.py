@@ -33,7 +33,8 @@ CVD_EXIT_MIN_HOLD_SEC = 120   # hold at least 2 min before CVD exit
 # Binance futures fees: maker 0.02%, taker 0.04%
 MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
-PENDING_TIMEOUT = 60  # seconds — give pullback entries more time to fill
+PENDING_TIMEOUT = 60   # seconds — default for CB / MR
+PENDING_TIMEOUT_WB = 180  # WB walls can be 1-2% away; need more time to fill
 
 
 class PaperTrader:
@@ -132,15 +133,16 @@ class PaperTrader:
             tp_price=tp,
             size_usdt=notional,
             quantity=notional / entry if entry else 0,
-            expiry=time.time() + PENDING_TIMEOUT,
+            expiry=time.time() + (PENDING_TIMEOUT_WB if signal.setup_type == SetupType.WALL_BOUNCE else PENDING_TIMEOUT),
         )
+        timeout_used = PENDING_TIMEOUT_WB if signal.setup_type == SetupType.WALL_BOUNCE else PENDING_TIMEOUT
         self.pending[signal.symbol] = order
         logger.info(
             f"[PAPER] Limit placed {signal.direction.value} {signal.symbol} "
             f"@ {entry:.6f} (signal: {signal.entry_price:.6f}, shift={shift:+.6f}) "
             f"SL={sl:.6f} TP={tp:.6f} "
             f"notional=${notional:.2f} margin=${margin:.2f} "
-            f"sl_dist={sl_pct*100:.3f}% expires={PENDING_TIMEOUT}s",
+            f"sl_dist={sl_pct*100:.3f}% expires={timeout_used}s",
         )
         return order
 

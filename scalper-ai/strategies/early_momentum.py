@@ -166,8 +166,12 @@ class EarlyMomentum(BaseStrategy):
         ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
         atr_pct = calc_atr_pct(candles_5m, 14, 576)
 
-        cvd_usd = abs(snap.cvd_delta_1m * snap.price)
-        # For trending path: use ADX strength as structure proxy (no compression needed)
+        # CVD: use 20s delta for trending (faster feedback), 1m for transitioning
+        if is_trending:
+            cvd_usd = abs(snap.cvd_delta_20s * snap.price)
+        else:
+            cvd_usd = abs(snap.cvd_delta_1m * snap.price)
+        # For trending: structure quality = ADX strength (higher ADX = stronger trend)
         if is_trending:
             struct_q = min(snap.indicators.adx / 60.0, 1.0) * 0.15
         else:
@@ -182,8 +186,6 @@ class EarlyMomentum(BaseStrategy):
         )
         score = comp.total()
         if score < ap.min_score:
-            from loguru import logger
-            logger.info(f"[EM-DBG] {snap.symbol} score={score:.3f} < {ap.min_score:.2f} FAIL")
             return None
 
         recent_5m = candles_5m[-10:]
