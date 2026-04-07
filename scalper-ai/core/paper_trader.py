@@ -27,7 +27,7 @@ MAX_HOLD_WB = 4               # WB wall edge is short-lived — exit fast
 STALE_EXIT_MINUTES = 4        # early exit for deep losers (>0.5% drawdown)
 STALE_EXIT_DRAWDOWN = 0.005   # 0.5% unrealized loss threshold for stale exit
 LEVERAGE = 25
-CVD_EXIT_MIN_PNL_PCT = 0.002  # 0.2% min profit for CVD exit (was 0.3%)
+CVD_EXIT_MIN_PNL_PCT = 0.004  # 0.4% min profit for CVD exit (hold winners longer)
 CVD_EXIT_MIN_ATR_MULT = 0.3   # OR 0.3× ATR profit for CVD exit (was 0.5)
 CVD_EXIT_MIN_HOLD_SEC = 60    # hold at least 1 min before CVD exit (was 2 min)
 # Binance futures fees: maker 0.02%, taker 0.04%
@@ -35,7 +35,7 @@ MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
 PENDING_TIMEOUT = 60   # seconds — default for CB / MR
 PENDING_TIMEOUT_WB = 180  # WB walls can be 1-2% away; need more time to fill
-GLOBAL_MAX_SL_PCT = 0.008  # 0.8% max SL distance for any trade
+GLOBAL_MAX_SL_PCT = 0.005  # 0.5% max SL distance for any trade
 
 
 class PaperTrader:

@@ -133,3 +133,7 @@ Files: core/paper_trader.py, core/bot_engine.py
 ## [2026-04-07 06:33 UTC]
 tune: EM-TREND stricter filters — ADX>35, CVD USD>2000, 2-candle momentum
 Files: strategies/early_momentum.py
+
+## [2026-04-07 06:53 UTC]
+tune: tighter SL cap 0.5% + higher CVD exit min 0.4% — fix loss/win ratio
+Files: core/paper_trader.py
