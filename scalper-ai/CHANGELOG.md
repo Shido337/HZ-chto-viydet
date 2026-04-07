@@ -109,3 +109,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 02:01 UTC]
 fix: EM-TREND soft OB guard + price momentum confirmation to improve win rate
 Files: strategies/early_momentum.py
+
+## [2026-04-07 02:24 UTC]
+tune: faster CVD exit (60s hold, 0.2pct min), EM hold 4min
+Files: core/paper_trader.py
