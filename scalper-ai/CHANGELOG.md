@@ -217,3 +217,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 12:51 UTC]
 fix: absorption fires on eaten wall without CVD min; bounce blocked if wall >15% absorbed
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 12:55 UTC]
+fix: BOUNCE_MAX_ABS_PCT 15pct->5pct; wall eating >5% = breakout not bounce; min_hist=10 for faster detection
+Files: strategies/wall_bounce.py

@@ -47,7 +47,7 @@ WALL_MIN_SECS: float       = 5.0     # wall must be present ≥5 s (spoof filter
 MAX_ABSORPTION_DIST_PCT: float = 0.020  # wall must be within 2.0% of price for absorption
 VEI_MAX_BOUNCE: float   = 1.5     # relaxed — bounce OK in moderate expansion
 BOUNCE_MIN_TOUCHES: int = 1       # level touched at least once
-BOUNCE_MAX_ABS_PCT: float = 0.15  # if wall already >15% absorbed → don't bounce (it's breaking)
+BOUNCE_MAX_ABS_PCT: float = 0.05  # if wall already >5% absorbed → don't bounce, it's breaking
 SL_BUFFER_PCT: float    = 0.0008  # 0.08 % buffer beyond wall for bounce SL
 MAX_SL_PCT: float       = 0.010   # hard cap: 1.0% max risk
 MIN_RR: float           = 1.5     # minimum reward-to-risk ratio
@@ -174,7 +174,7 @@ class WallBounce(BaseStrategy):
                 if snap.regime == MarketRegime.TRENDING_BEAR:
                     return None
                 # Absorption guard: if wall already being eaten → it's a breakout, not a bounce
-                if wall_absorption_pct(snap.wall_history, wp, "bid") >= BOUNCE_MAX_ABS_PCT:
+                if wall_absorption_pct(snap.wall_history, wp, "bid", min_hist=10) >= BOUNCE_MAX_ABS_PCT:
                     return None
                 touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "bid", WALL_MIN_SECS)
@@ -201,7 +201,7 @@ class WallBounce(BaseStrategy):
                 if snap.regime == MarketRegime.TRENDING_BULL:
                     return None
                 # Absorption guard: if wall already being eaten → it's a breakout, not a bounce
-                if wall_absorption_pct(snap.wall_history, wp, "ask") >= BOUNCE_MAX_ABS_PCT:
+                if wall_absorption_pct(snap.wall_history, wp, "ask", min_hist=10) >= BOUNCE_MAX_ABS_PCT:
                     return None
                 touches = count_level_touches(klines, wp)
                 if (wall_stable(snap.wall_history, wp, "ask", WALL_MIN_SECS)
