@@ -77,3 +77,7 @@ Files: strategies/early_momentum.py, strategies/continuation_break.py, strategie
 ## [2026-04-07 00:52 UTC]
 fix: widen WB SL floor (0.3%/0.5xATR), EM ATR compression 90-0.15x, CB retest 2.5%, EM-TREND cvd20s min=50
 Files: strategies/wall_bounce.py, strategies/early_momentum.py, strategies/continuation_break.py, core/bot_engine.py
+
+## [2026-04-07 01:01 UTC]
+fix: clamp score components at 0, EM trending uses ADX for structure, remove CB rejection candle check
+Files: core/signal_generator.py, strategies/early_momentum.py, strategies/continuation_break.py

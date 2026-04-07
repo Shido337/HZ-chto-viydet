@@ -57,8 +57,7 @@ class ContinuationBreak(BaseStrategy):
         direction, broken_level, break_idx = result
         if not self._check_flow(snap, direction):
             return None
-        if not self._check_rejection_candle(snap, direction):
-            return None
+        # Rejection candle check removed — retest proximity + OB is sufficient
         return self._build_signal(snap, direction, broken_level, break_idx, ml_boost)
 
     # -- sub-checks ---------------------------------------------------------

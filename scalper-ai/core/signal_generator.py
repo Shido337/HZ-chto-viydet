@@ -29,12 +29,12 @@ class ScoreComponents:
 
     def total(self) -> float:
         return (
-            min(self.cvd_alignment, 0.25)
-            + min(self.ob_imbalance, 0.20)
-            + min(self.volume_confirmation, 0.15)
-            + min(self.structure_quality, 0.15)
-            + min(self.regime_match, 0.15)
-            + min(self.ml_boost, 0.10)
+            max(0.0, min(self.cvd_alignment, 0.25))
+            + max(0.0, min(self.ob_imbalance, 0.20))
+            + max(0.0, min(self.volume_confirmation, 0.15))
+            + max(0.0, min(self.structure_quality, 0.15))
+            + max(0.0, min(self.regime_match, 0.15))
+            + max(0.0, min(self.ml_boost, 0.10))
         )
 
 

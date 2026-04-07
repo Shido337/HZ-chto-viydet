@@ -57,13 +57,19 @@ class EarlyMomentum(BaseStrategy):
             if direction is None:
                 return None
             if not self._check_trend_alignment(snap, direction):
+                from loguru import logger
+                logger.info(f"[EM-DBG] {snap.symbol} trend_align FAIL dir={direction.value}")
                 return None
             ob = order_book_imbalance(snap.bid_qty, snap.ask_qty)
             if direction == Direction.LONG and ob < TRENDING_OB_MIN:
+                from loguru import logger
+                logger.info(f"[EM-DBG] {snap.symbol} ob={ob:.2f} < {TRENDING_OB_MIN} FAIL")
                 return None
             if direction == Direction.SHORT and ob > (1 - TRENDING_OB_MIN):
+                from loguru import logger
+                logger.info(f"[EM-DBG] {snap.symbol} ob={ob:.2f} > {1-TRENDING_OB_MIN} FAIL")
                 return None
-            return self._build_signal(snap, direction, ml_boost)
+            return self._build_signal(snap, direction, ml_boost, is_trending=True)
 
         return None
 
@@ -164,6 +170,7 @@ class EarlyMomentum(BaseStrategy):
 
     def _build_signal(
         self, snap: MarketSnapshot, d: Direction, ml_boost: float,
+        is_trending: bool = False,
     ) -> Signal | None:
         ap = snap.adaptive
         candles_5m = list(snap.klines_5m)
@@ -171,16 +178,23 @@ class EarlyMomentum(BaseStrategy):
         atr_pct = calc_atr_pct(candles_5m, 14, 576)
 
         cvd_usd = abs(snap.cvd_delta_1m * snap.price)
+        # For trending path: use ADX strength as structure proxy (no compression needed)
+        if is_trending:
+            struct_q = min(snap.indicators.adx / 60.0, 1.0) * 0.15
+        else:
+            struct_q = max(min((ap.em_atr_compression_pct - atr_pct) / 20, 1.0), 0.0) * 0.15
         comp = ScoreComponents(
             cvd_alignment=min(cvd_usd / 5000, 1.0) * 0.25,
             ob_imbalance=(ob if d == Direction.LONG else 1 - ob) * 0.20,
             volume_confirmation=0.15,
-            structure_quality=min((ap.em_atr_compression_pct - atr_pct) / 20, 1.0) * 0.15,
+            structure_quality=struct_q,
             regime_match=0.15,
             ml_boost=min(ml_boost, 0.10),
         )
         score = comp.total()
         if score < ap.min_score:
+            from loguru import logger
+            logger.info(f"[EM-DBG] {snap.symbol} score={score:.3f} < {ap.min_score:.2f} FAIL")
             return None
 
         recent_5m = candles_5m[-10:]
