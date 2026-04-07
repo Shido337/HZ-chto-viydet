@@ -82,6 +82,13 @@ class Position:
     breakeven_moved: bool = False
     current_pnl: float = 0.0
     exit_price: float = 0.0
+    # entry market state (captured at open for later analysis)
+    entry_cvd_20s: float = 0.0
+    entry_cvd_1m: float = 0.0
+    entry_adx: float = 0.0
+    entry_ob: float = 0.0       # order book imbalance: ask_qty/(bid_qty+ask_qty)
+    entry_regime: str = ""
+    entry_sub_setup: str = ""
 
 
 @dataclass

@@ -108,6 +108,10 @@ class PaperTrader:
         margin = notional / LEVERAGE
         sl_pct = abs(entry - sl) / entry if entry else 0
 
+        # Capture entry market state for later analysis
+        total_qty = snap.bid_qty + snap.ask_qty
+        entry_ob = snap.ask_qty / total_qty if total_qty > 0 else 0.5
+
         if is_market:
             # Immediate fill — create Position directly
             pos = Position(
@@ -123,6 +127,12 @@ class PaperTrader:
                 quantity=notional / entry if entry else 0,
                 best_price=entry,
                 original_risk=abs(entry - sl),
+                entry_cvd_20s=snap.cvd_delta_20s,
+                entry_cvd_1m=snap.cvd_delta_1m,
+                entry_adx=snap.indicators.adx,
+                entry_ob=entry_ob,
+                entry_regime=snap.regime.value,
+                entry_sub_setup=signal.sub_setup,
             )
             self.positions[signal.symbol] = pos
             logger.info(
@@ -193,6 +203,8 @@ class PaperTrader:
                 is_filled = snap.bid >= order.entry_price > 0
 
             if is_filled:
+                total_qty = snap.bid_qty + snap.ask_qty
+                fill_ob = snap.ask_qty / total_qty if total_qty > 0 else 0.5
                 pos = Position(
                     signal=order.signal,
                     symbol=order.symbol,
@@ -206,6 +218,12 @@ class PaperTrader:
                     quantity=order.quantity,
                     best_price=order.entry_price,
                     original_risk=abs(order.entry_price - order.sl_price),
+                    entry_cvd_20s=snap.cvd_delta_20s,
+                    entry_cvd_1m=snap.cvd_delta_1m,
+                    entry_adx=snap.indicators.adx,
+                    entry_ob=fill_ob,
+                    entry_regime=snap.regime.value,
+                    entry_sub_setup=order.signal.sub_setup,
                 )
                 self.positions[symbol] = pos
                 del self.pending[symbol]

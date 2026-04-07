@@ -63,6 +63,13 @@ class Trade(Base):
     exit_reason = Column(String(30), nullable=True)
     opened_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at = Column(DateTime, nullable=True)
+    # entry market state
+    entry_cvd_20s = Column(Float, nullable=True)
+    entry_cvd_1m = Column(Float, nullable=True)
+    entry_adx = Column(Float, nullable=True)
+    entry_ob = Column(Float, nullable=True)
+    entry_regime = Column(String(30), nullable=True)
+    entry_sub_setup = Column(String(30), nullable=True)
 
 
 class Session(Base):

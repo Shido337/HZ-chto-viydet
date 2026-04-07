@@ -327,3 +327,7 @@ Files: core/bot_engine.py
 ## [2026-04-07 16:12 UTC]
 fix: raise absorption threshold 15pct to 50pct for reversal
 Files: core/bot_engine.py
+
+## [2026-04-07 16:40 UTC]
+feat: store entry market state in trades DB (cvd, adx, ob, regime)
+Files: core/signal_generator.py, core/paper_trader.py, core/bot_engine.py, data/models.py

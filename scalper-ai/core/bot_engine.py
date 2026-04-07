@@ -686,6 +686,12 @@ class BotEngine:
                         pos.opened_at, tz=timezone.utc,
                     ),
                     closed_at=datetime.now(timezone.utc),
+                    entry_cvd_20s=getattr(pos, "entry_cvd_20s", None),
+                    entry_cvd_1m=getattr(pos, "entry_cvd_1m", None),
+                    entry_adx=getattr(pos, "entry_adx", None),
+                    entry_ob=getattr(pos, "entry_ob", None),
+                    entry_regime=getattr(pos, "entry_regime", None),
+                    entry_sub_setup=getattr(pos, "entry_sub_setup", None),
                 )
                 session.add(trade)
                 await session.commit()
