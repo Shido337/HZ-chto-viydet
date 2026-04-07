@@ -221,3 +221,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 12:55 UTC]
 fix: BOUNCE_MAX_ABS_PCT 15pct->5pct; wall eating >5% = breakout not bounce; min_hist=10 for faster detection
 Files: strategies/wall_bounce.py
+
+## [2026-04-07 12:57 UTC]
+tune: BOUNCE_MAX_ABS_PCT 5pct->25pct
+Files: strategies/wall_bounce.py
