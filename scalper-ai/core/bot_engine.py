@@ -254,26 +254,22 @@ class BotEngine:
                     and reason in ("sl_hit", "wall_absorbed")
                 )
                 if is_wb_bounce_sl:
-                    # wall_absorbed: clear cooldown entirely → direct reversal signal is queued
-                    # sl_hit: 3s pause (store now-12 so 15s window expires in 3s)
-                    if reason == "wall_absorbed":
-                        self._signal_cooldown.pop(pos.symbol, None)
-                        rev = self._make_wall_absorbed_reversal(pos)
-                        if rev:
-                            logger.info(
-                                f"[REVERSAL] {pos.symbol} {rev.direction.value} "
-                                f"absorption after wall_absorbed bounce "
-                                f"entry={rev.entry_price:.6f} sl={rev.sl_price:.6f}",
-                            )
-                            self.signals.append(rev)
-                            if len(self.signals) > MAX_SIGNALS_HISTORY:
-                                self.signals = self.signals[-MAX_SIGNALS_HISTORY:]
-                            if self._on_signal:
-                                await self._on_signal(rev)
-                            if not self.risk.check_daily_limit():
-                                await self._process_signal(rev)
-                    else:
-                        self._signal_cooldown[pos.symbol] = now - 12
+                    # Wall broke (SL hit = price went 0.08% past wall, wall_absorbed = early detect).
+                    # Either way: clear cooldown and create reversal in breakout direction immediately.
+                    self._signal_cooldown.pop(pos.symbol, None)
+                    rev = self._make_wall_absorbed_reversal(pos)
+                    if rev:
+                        logger.info(
+                            f"[REVERSAL] {pos.symbol} {rev.direction.value} "
+                            f"wall broke ({reason}) → breakout entry={rev.entry_price:.6f} sl={rev.sl_price:.6f}",
+                        )
+                        self.signals.append(rev)
+                        if len(self.signals) > MAX_SIGNALS_HISTORY:
+                            self.signals = self.signals[-MAX_SIGNALS_HISTORY:]
+                        if self._on_signal:
+                            await self._on_signal(rev)
+                        if not self.risk.check_daily_limit():
+                            await self._process_signal(rev)
                     # Don't increment loss counter — wall break is structural, not a bad signal
                 else:
                     # Loss: progressive cooldown based on consecutive losses
@@ -340,6 +336,9 @@ class BotEngine:
 
         if pos.direction == Direction.SHORT:
             # Was SHORT from ASK wall → ASK wall absorbed by buyers → go LONG
+            # CVD must confirm buyers are actually pressing through
+            if snap.cvd_delta_20s <= 0:
+                return None
             d = Direction.LONG
             entry = snap.price  # price at/above wall now
             sl = max(wall_p * (1 - max(atr * 1.2 / wall_p, 0.003)), entry * 0.990)
@@ -348,6 +347,9 @@ class BotEngine:
             tp = entry + (entry - sl) * 2.0
         else:
             # Was LONG from BID wall → BID wall absorbed by sellers → go SHORT
+            # CVD must confirm sellers are actually pressing through
+            if snap.cvd_delta_20s >= 0:
+                return None
             d = Direction.SHORT
             entry = snap.price
             sl = min(wall_p * (1 + max(atr * 1.2 / wall_p, 0.003)), entry * 1.010)

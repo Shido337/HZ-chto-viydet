@@ -307,3 +307,7 @@ Files: strategies/wall_bounce.py
 ## [2026-04-07 14:33 UTC]
 feat: bounce CVD-based market/limit split — going away=market, toward wall=limit
 Files: strategies/wall_bounce.py, core/paper_trader.py, core/bot_engine.py
+
+## [2026-04-07 15:03 UTC]
+fix: bounce sl_hit also triggers reversal signal (same as wall_absorbed), CVD-gated
+Files: core/bot_engine.py
