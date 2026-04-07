@@ -35,6 +35,7 @@ MAKER_FEE = 0.0002  # limit orders (entry, TP)
 TAKER_FEE = 0.0004  # market orders (SL by mark price, CVD exit, time stop)
 PENDING_TIMEOUT = 60   # seconds — default for CB / MR
 PENDING_TIMEOUT_WB = 180  # WB walls can be 1-2% away; need more time to fill
+GLOBAL_MAX_SL_PCT = 0.008  # 0.8% max SL distance for any trade
 
 
 class PaperTrader:
@@ -85,6 +86,15 @@ class PaperTrader:
         shift = entry - signal.entry_price
         sl = signal.sl_price + shift
         tp = signal.tp_price + shift
+
+        # Global SL cap: tighten SL if risk > GLOBAL_MAX_SL_PCT of entry
+        max_sl_dist = entry * GLOBAL_MAX_SL_PCT
+        sl_dist = abs(entry - sl)
+        if sl_dist > max_sl_dist:
+            if signal.direction == Direction.LONG:
+                sl = entry - max_sl_dist
+            else:
+                sl = entry + max_sl_dist
 
         notional = size_usdt
         margin = notional / LEVERAGE

@@ -101,3 +101,7 @@ Files: strategies/early_momentum.py
 ## [2026-04-07 01:43 UTC]
 tune: revert trailing to tight (0.3/0.25), raise min_score to 0.55
 Files: core/bot_engine.py, strategies/base_strategy.py, data/cache.py
+
+## [2026-04-07 01:54 UTC]
+fix: global 0.8pct SL cap in paper_trader to limit max loss per trade
+Files: core/paper_trader.py
