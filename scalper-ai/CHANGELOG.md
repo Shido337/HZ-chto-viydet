@@ -169,3 +169,7 @@ Files: core/paper_trader.py
 ## [2026-04-07 09:53 UTC]
 feat: WB wall-gone SL tightens to wall edge — thesis dead = immediate exit
 Files: core/paper_trader.py
+
+## [2026-04-07 09:56 UTC]
+fix: EM-TREND pullback guard — reject LONG when price >3% below recent 60min high (dead cat bounce filter)
+Files: strategies/early_momentum.py, core/bot_engine.py

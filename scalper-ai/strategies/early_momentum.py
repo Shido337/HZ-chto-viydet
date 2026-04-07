@@ -23,6 +23,7 @@ TRENDING_OB_MIN = 0.50        # loose OB threshold in strong trend
 TRENDING_CVD_20S_MIN = 50.0    # minimum |cvd_delta_20s| units for impulse (fallback)
 TRENDING_CVD_USD_MIN = 2000.0  # minimum CVD × price in $ for meaningful impulse
 TRENDING_ADX_MIN = 35.0        # require strong trend (ADX > 35) for trending path
+MAX_PULLBACK_FROM_EXTREME = 0.03  # reject LONG if price >3% below recent high (pullback, not momentum)
 # Adaptive entry constants come from snap.adaptive:
 #   em_adx_low, em_adx_high, em_atr_compression_pct, em_cvd_bars,
 #   ob_min, min_score, tp_rr, max_sl_atr, min_sl_atr, atr_value
@@ -122,6 +123,19 @@ class EarlyMomentum(BaseStrategy):
             else:
                 if not (c1["c"] < c1["o"] and c2["c"] < c2["o"]):
                     return None  # need 2 bearish candles
+        # Pullback guard: reject if price is far from the recent extreme
+        # ADX lags — after a massive spike + dump, ADX stays high but momentum is dead
+        candles_5m = list(snap.klines_5m)
+        if len(candles_5m) >= 12:
+            recent = candles_5m[-12:]  # last ~60 minutes
+            if direction == Direction.LONG:
+                recent_high = max(c["h"] for c in recent)
+                if recent_high > 0 and (recent_high - snap.price) / recent_high > MAX_PULLBACK_FROM_EXTREME:
+                    return None  # price dumped >3% from recent high — dead cat bounce, not momentum
+            else:
+                recent_low = min(c["l"] for c in recent)
+                if recent_low > 0 and (snap.price - recent_low) / recent_low > MAX_PULLBACK_FROM_EXTREME:
+                    return None  # price bounced >3% from recent low — relief rally, not momentum
         return direction
 
     def _check_cvd_buildup(self, snap: MarketSnapshot) -> Direction | None:

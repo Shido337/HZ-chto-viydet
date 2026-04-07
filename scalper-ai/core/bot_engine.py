@@ -421,13 +421,24 @@ class BotEngine:
                 reason = "EM-TREND: "
                 expected_dir = "LONG" if regime == MarketRegime.TRENDING_BULL else "SHORT"
                 cvd20 = snap.cvd_delta_20s
-                from strategies.early_momentum import TRENDING_CVD_20S_MIN
+                from strategies.early_momentum import TRENDING_CVD_20S_MIN, MAX_PULLBACK_FROM_EXTREME
                 cvd_ok = (cvd20 >= TRENDING_CVD_20S_MIN if expected_dir == "LONG"
                           else cvd20 <= -TRENDING_CVD_20S_MIN)
+                # Pullback from recent extreme
+                candles_5m_em = list(snap.klines_5m)
+                pullback_pct = 0.0
+                if len(candles_5m_em) >= 12:
+                    recent = candles_5m_em[-12:]
+                    if expected_dir == "LONG":
+                        rh = max(c["h"] for c in recent)
+                        pullback_pct = (rh - snap.price) / rh if rh else 0
+                    else:
+                        rl = min(c["l"] for c in recent)
+                        pullback_pct = (snap.price - rl) / rl if rl else 0
                 reason += (
                     f"{expected_dir} cvd20s={cvd20:.0f} "
                     f"ob={ob:.2f} adx={adx_val:.1f} "
-                    f"cvd_ok={cvd_ok}"
+                    f"cvd_ok={cvd_ok} pullback={pullback_pct*100:.1f}%"
                 )
                 logger.info(f"[DIAG] {symbol} {reason}")
 
